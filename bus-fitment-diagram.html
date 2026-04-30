@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bus Parts Fitment Diagram — First Bus</title>
+  <style>
+    :root {
+      --fb-magenta: #E4007C;
+      --fb-navy:    #1D2B5F;
+      --zone-engine:  #B41E2A;
+      --zone-brakes:  #2E6B9E;
+      --zone-doors:   #C07800;
+      --zone-elec:    #007A6E;
+      --zone-general: #606878;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #F4F5F7; color: #222; font-size: 14px; }
+    .hidden { display: none !important; }
+
+    #app-header { background: var(--fb-navy); color: white; position: sticky; top: 0; z-index: 10; }
+    .header-inner { display: flex; align-items: stretch; max-width: 1400px; margin: 0 auto; }
+    .brand-bar { width: 5px; background: var(--fb-magenta); flex-shrink: 0; }
+    .header-text { padding: 12px 20px; }
+    .header-sup { display: block; font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.08em; }
+    .header-title { font-size: 20px; font-weight: 600; }
+
+    #app-main { max-width: 1400px; margin: 0 auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 16px; }
+    .card { background: white; border-radius: 8px; border: 1px solid #DDE1E8; padding: 16px 20px; }
+
+    .upload-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 20px; }
+    .file-group { display: flex; flex-direction: column; gap: 5px; }
+    .file-group label { font-size: 12px; font-weight: 600; color: var(--fb-navy); text-transform: uppercase; letter-spacing: 0.05em; }
+    .file-group input[type="file"] { padding: 6px 8px; border: 1px solid #CDD1D8; border-radius: 5px; background: #FAFBFC; font-size: 13px; cursor: pointer; }
+    .btn-primary { background: var(--fb-magenta); color: white; border: none; padding: 10px 28px; border-radius: 5px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; height: 38px; }
+    .btn-primary:hover { background: #c0006a; }
+    .btn-primary:disabled { background: #8C96A6; cursor: not-allowed; }
+
+    #status-bar { padding: 10px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; }
+    .status-ok    { background: #E6F4EA; color: #1E6A35; border: 1px solid #A8D5B5; }
+    .status-warn  { background: #FFF8E1; color: #7A5800; border: 1px solid #F0D070; }
+    .status-error { background: #FDECEA; color: #8B1A1A; border: 1px solid #F0AAAA; }
+
+    #model-section { display: block; }
+    #model-section label { font-size: 12px; font-weight: 600; color: var(--fb-navy); text-transform: uppercase; letter-spacing: 0.05em; margin-right: 12px; }
+    #model-select { padding: 8px 12px; border: 1px solid #CDD1D8; border-radius: 5px; font-size: 14px; font-weight: 500; min-width: 280px; background: white; cursor: pointer; }
+
+    #diagram-section { display: flex; gap: 20px; align-items: flex-start; }
+    #diagram-container { flex: 1 1 auto; min-width: 0; }
+    #diagram-wrapper { background: white; border-radius: 8px; border: 1px solid #DDE1E8; padding: 12px; overflow: hidden; }
+
+    .zone-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #444; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+    #zone-extra-buttons { margin-top: 10px; }
+    .zone-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 5px; border: 2px solid var(--zone-general); background: white; color: var(--zone-general); font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s, color 0.15s; }
+    .zone-btn:hover { background: var(--zone-general); color: white; }
+    .zone-btn.zone-selected { background: var(--zone-general); color: white; }
+    .btn-badge { background: var(--fb-navy); color: white; font-size: 11px; font-weight: 700; min-width: 20px; height: 20px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; }
+    .zone-btn.zone-selected .btn-badge { background: white; color: var(--fb-navy); }
+
+    #parts-panel { width: 400px; flex-shrink: 0; background: white; border-radius: 8px; border: 1px solid #DDE1E8; display: flex; flex-direction: column; max-height: 520px; }
+    #parts-zone-title { padding: 14px 16px 10px; font-size: 15px; font-weight: 700; color: var(--fb-navy); border-bottom: 2px solid var(--fb-magenta); flex-shrink: 0; }
+    #parts-table-wrapper { overflow-y: auto; flex: 1; }
+    #parts-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #parts-table thead th { position: sticky; top: 0; background: var(--fb-navy); color: white; padding: 8px 10px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    #parts-table thead th.sortable { cursor: pointer; user-select: none; }
+    #parts-table thead th.sortable:hover { background: #2A3A70; }
+    #parts-table tbody tr:nth-child(even) { background: #F8F9FB; }
+    #parts-table tbody tr:hover { background: #EFF1F6; }
+    #parts-table tbody td { padding: 7px 10px; border-bottom: 1px solid #EAECF0; vertical-align: top; }
+    .issues-count { font-weight: 700; color: var(--fb-navy); text-align: right !important; }
+    .no-data { text-align: center !important; color: #8C96A6; padding: 24px !important; font-style: italic; }
+
+    .zone-group { cursor: pointer; opacity: 0.18; transition: opacity 0.2s; }
+    .zone-group:hover { opacity: 0.50; }
+    .zone-group.zone-selected { opacity: 0.62; }
+    #zone-engine     rect, #zone-engine     circle { fill: var(--zone-engine); stroke: #8B1020; stroke-width: 2.5; }
+    #zone-brakes     rect, #zone-brakes     circle { fill: var(--zone-brakes); stroke: #1A4A6E; stroke-width: 2.5; }
+    #zone-doors      rect, #zone-doors      circle { fill: var(--zone-doors);  stroke: #8A5600; stroke-width: 2.5; }
+    #zone-electrical rect, #zone-electrical circle { fill: var(--zone-elec);   stroke: #005548; stroke-width: 2.5; }
+    .zone-badge { pointer-events: none; }
+    .badge-circle { fill: var(--fb-navy); }
+    .badge-text { font-size: 11px; font-weight: 700; fill: white; font-family: 'Segoe UI', Arial, sans-serif; }
+
+    @media (max-width: 900px) {
+      #diagram-section { flex-direction: column; }
+      #parts-panel { width: 100%; max-height: 400px; }
+    }
+  </style>
+</head>
+<body>
+
+<header id="app-header">
+  <div class="header-inner">
+    <div class="brand-bar"></div>
+    <div class="header-text">
+      <span class="header-sup">First Bus — Stores</span>
+      <h1 class="header-title">Bus Parts Fitment Diagram</h1>
+    </div>
+  </div>
+</header>
+
+<main id="app-main">
+
+  <section id="upload-section" class="card">
+    <div class="upload-row">
+      <div class="file-group">
+        <label for="input-fleet">Fleet Reference CSV</label>
+        <input type="file" id="input-fleet" accept=".csv">
+      </div>
+      <div class="file-group">
+        <label for="input-tx">Transaction History CSV</label>
+        <input type="file" id="input-tx" accept=".csv">
+      </div>
+      <button id="btn-load" class="btn-primary">Load</button>
+    </div>
+  </section>
+
+  <div id="status-bar" class="hidden"></div>
+
+  <section id="model-section" class="hidden card">
+    <label for="model-select">Bus Model</label>
+    <select id="model-select">
+      <option value="">-- Select bus model --</option>
+    </select>
+  </section>
+
+  <section id="diagram-section" class="hidden">
+    <div id="diagram-container">
+      <div id="diagram-wrapper">
+        <svg id="bus-svg" viewBox="0 0 900 310" width="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+
+          <!-- BASE BUS OUTLINE -->
+          <g id="bus-base" pointer-events="none">
+            <rect x="50" y="50" width="800" height="195" rx="14" fill="#ECEEF2" stroke="#1D2B5F" stroke-width="3"/>
+            <rect x="50" y="50" width="800" height="46" rx="14" fill="#2A3A70"/>
+            <rect x="50" y="76" width="800" height="20" fill="#2A3A70"/>
+            <line x1="168" y1="50" x2="168" y2="245" stroke="#1D2B5F" stroke-width="2.5"/>
+            <rect x="58" y="60" width="96" height="92" rx="6" fill="#AED6E8" opacity="0.9"/>
+            <rect x="182" y="60" width="70" height="50" rx="4" fill="#AED6E8" opacity="0.85"/>
+            <rect x="264" y="60" width="70" height="50" rx="4" fill="#AED6E8" opacity="0.85"/>
+            <rect x="346" y="60" width="70" height="50" rx="4" fill="#AED6E8" opacity="0.85"/>
+            <rect x="428" y="60" width="70" height="50" rx="4" fill="#AED6E8" opacity="0.85"/>
+            <rect x="510" y="60" width="70" height="50" rx="4" fill="#AED6E8" opacity="0.85"/>
+            <rect x="592" y="60" width="70" height="50" rx="4" fill="#AED6E8" opacity="0.85"/>
+            <rect x="674" y="60" width="70" height="50" rx="4" fill="#AED6E8" opacity="0.85"/>
+            <rect x="182" y="130" width="56" height="115" rx="3" fill="#D8DBE4" stroke="#B0B5C0" stroke-width="1"/>
+            <line x1="210" y1="131" x2="210" y2="244" stroke="#B0B5C0" stroke-width="1" stroke-dasharray="5,3"/>
+            <rect x="418" y="130" width="62" height="115" rx="3" fill="#D8DBE4" stroke="#B0B5C0" stroke-width="1"/>
+            <line x1="449" y1="131" x2="449" y2="244" stroke="#B0B5C0" stroke-width="1" stroke-dasharray="5,3"/>
+            <rect x="806" y="52" width="42" height="191" fill="#BEC5D2" stroke="#9AA5B8" stroke-width="1"/>
+            <line x1="806" y1="50" x2="806" y2="245" stroke="#1D2B5F" stroke-width="2.5"/>
+            <line x1="816" y1="112" x2="840" y2="112" stroke="#9AA5B8" stroke-width="1.5"/>
+            <line x1="816" y1="126" x2="840" y2="126" stroke="#9AA5B8" stroke-width="1.5"/>
+            <line x1="816" y1="140" x2="840" y2="140" stroke="#9AA5B8" stroke-width="1.5"/>
+            <line x1="816" y1="154" x2="840" y2="154" stroke="#9AA5B8" stroke-width="1.5"/>
+            <line x1="816" y1="168" x2="840" y2="168" stroke="#9AA5B8" stroke-width="1.5"/>
+            <rect x="52" y="228" width="796" height="17" rx="5" fill="#6B7480"/>
+            <circle cx="175" cy="272" r="38" fill="#242424" stroke="#111" stroke-width="3"/>
+            <circle cx="175" cy="272" r="24" fill="#4A4A4A" stroke="#333" stroke-width="1.5"/>
+            <circle cx="175" cy="272" r="9"  fill="#9A9A9A"/>
+            <circle cx="712" cy="272" r="38" fill="#242424" stroke="#111" stroke-width="3"/>
+            <circle cx="712" cy="272" r="24" fill="#4A4A4A" stroke="#333" stroke-width="1.5"/>
+            <circle cx="712" cy="272" r="9"  fill="#9A9A9A"/>
+            <text x="310" y="192" font-size="34" font-weight="900" font-family="'Segoe UI',Arial,sans-serif" fill="#1D2B5F" opacity="0.08" letter-spacing="4">FIRST</text>
+            <rect x="62" y="158" width="60" height="26" rx="3" fill="#1D2B5F" opacity="0.65"/>
+            <text x="92" y="175" text-anchor="middle" font-size="10" font-weight="700" font-family="'Segoe UI',Arial,sans-serif" fill="white" opacity="0.7">XXXXX</text>
+          </g>
+
+          <!-- ZONE OVERLAYS -->
+          <g id="zone-electrical" class="zone-group" data-zone="electrical">
+            <title>Electrical, HVAC &amp; Interior</title>
+            <rect x="52" y="52" width="752" height="90" rx="12"/>
+          </g>
+          <g id="zone-doors" class="zone-group" data-zone="doors">
+            <title>Doors &amp; Body</title>
+            <rect x="52" y="52" width="118" height="193" rx="10"/>
+            <rect x="180" y="128" width="60" height="117" rx="4"/>
+            <rect x="246" y="128" width="166" height="117"/>
+            <rect x="416" y="128" width="66" height="117" rx="4"/>
+            <rect x="488" y="128" width="314" height="117"/>
+          </g>
+          <g id="zone-brakes" class="zone-group" data-zone="brakes">
+            <title>Brakes, Wheels &amp; Suspension</title>
+            <circle cx="175" cy="272" r="48"/>
+            <circle cx="712" cy="272" r="48"/>
+            <rect x="52" y="224" width="796" height="23" rx="4"/>
+          </g>
+          <g id="zone-engine" class="zone-group" data-zone="engine">
+            <title>Engine &amp; Drivetrain</title>
+            <rect x="804" y="52" width="46" height="193" rx="10"/>
+          </g>
+
+          <!-- BADGES -->
+          <g id="badges" pointer-events="none">
+            <g id="badge-engine" class="zone-badge" visibility="hidden">
+              <circle class="badge-circle" cx="827" cy="148" r="15"/>
+              <text class="badge-text" x="827" y="148" text-anchor="middle" dominant-baseline="central">0</text>
+            </g>
+            <g id="badge-brakes" class="zone-badge" visibility="hidden">
+              <circle class="badge-circle" cx="443" cy="262" r="15"/>
+              <text class="badge-text" x="443" y="262" text-anchor="middle" dominant-baseline="central">0</text>
+            </g>
+            <g id="badge-doors" class="zone-badge" visibility="hidden">
+              <circle class="badge-circle" cx="112" cy="185" r="15"/>
+              <text class="badge-text" x="112" y="185" text-anchor="middle" dominant-baseline="central">0</text>
+            </g>
+            <g id="badge-electrical" class="zone-badge" visibility="hidden">
+              <circle class="badge-circle" cx="500" cy="105" r="15"/>
+              <text class="badge-text" x="500" y="105" text-anchor="middle" dominant-baseline="central">0</text>
+            </g>
+          </g>
+
+        </svg>
+      </div>
+
+      <div class="zone-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--zone-engine)"></div><span>Engine &amp; Drivetrain</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--zone-brakes)"></div><span>Brakes, Wheels &amp; Suspension</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--zone-doors)"></div><span>Doors &amp; Body</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--zone-elec)"></div><span>Electrical, HVAC &amp; Interior</span></div>
+      </div>
+      <div id="zone-extra-buttons">
+        <button class="zone-btn" data-zone="general" id="btn-general">
+          General / Unclassified
+          <span id="badge-general" class="btn-badge">0</span>
+        </button>
+      </div>
+    </div>
+
+    <aside id="parts-panel">
+      <h2 id="parts-zone-title">Select a zone</h2>
+      <div id="parts-table-wrapper">
+        <table id="parts-table">
+          <thead>
+            <tr>
+              <th>Part No.</th>
+              <th>Description</th>
+              <th>Group</th>
+              <th class="sortable" id="th-issues">Issues &#9660;</th>
+            </tr>
+          </thead>
+          <tbody id="parts-tbody">
+            <tr><td colspan="4" class="no-data">Click a zone on the diagram.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </aside>
+  </section>
+
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+
+/* === §1 ZONE CONFIGURATION === */
+const ZONES = [
+  {
+    id: 'engine', label: 'Engine & Drivetrain',
+    keywords: ['engine','gearbox','transmission','coolant','fuel','exhaust','oil','clutch',
+                'propshaft','turbo','injector','pump','radiator','intercooler','crankshaft'],
+    svgGroupId: 'zone-engine', badgeId: 'badge-engine',
+  },
+  {
+    id: 'brakes', label: 'Brakes, Wheels & Suspension',
+    keywords: ['brake','wheel','tyre','tire','suspension','shock','spring','axle','steering',
+                'hub','caliper','bearing','damper','air bag','air spring','bush','track rod'],
+    svgGroupId: 'zone-brakes', badgeId: 'badge-brakes',
+  },
+  {
+    id: 'doors', label: 'Doors & Body',
+    keywords: ['door','body','window','glass','mirror','seat','panel','trim','cab','bumper',
+                'wiper','hinge','step','floor','chassis','frame'],
+    svgGroupId: 'zone-doors', badgeId: 'badge-doors',
+  },
+  {
+    id: 'electrical', label: 'Electrical, HVAC & Interior',
+    keywords: ['electric','light','lamp','fuse','relay','battery','hvac','air con','heater',
+                'fan','interior','sensor','camera','indicator','alternator','starter',
+                'wiring','module','controller','display','harness'],
+    svgGroupId: 'zone-electrical', badgeId: 'badge-electrical',
+  },
+  {
+    id: 'general', label: 'General / Unclassified',
+    keywords: [], svgGroupId: null, badgeId: 'badge-general',
+  },
+];
+
+/* === §2 COLUMN DETECTION === */
+const COL_FLEET_MODEL   = ['type','model','bus type','vehicle type','bus model','bodytype'];
+const COL_FLEET_FLEETNO = ['fleet no','fleet number','fleet'];
+const COL_FLEET_REG     = ['reg','registration','vrn','regno'];
+const COL_TX_FLEETNO    = ['fleet no','fleet number','fleet'];
+const COL_TX_MATERIAL   = ['material','material no','material number','part no','part number','article'];
+const COL_TX_DESC       = ['description','material desc','material description','short text','part description'];
+const COL_TX_GROUP      = ['material group','mat group','group desc','group description','mat grp'];
+const COL_TX_QTY        = ['qty','quantity','issued qty','total qty','issue qty','movement qty'];
+const COL_TX_DATE       = ['posting date','issue date','date','movement date'];
+
+function normaliseHeader(s) {
+  return String(s).toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+function detectColumn(headers, candidates, required) {
+  const norm = headers.map(h => ({ raw: h, n: normaliseHeader(h) }));
+  for (const c of candidates) {
+    const nc = normaliseHeader(c);
+    const hit = norm.find(h => h.n === nc);
+    if (hit) return hit.raw;
+  }
+  for (const c of candidates) {
+    const nc = normaliseHeader(c);
+    const hit = norm.find(h => h.n.includes(nc));
+    if (hit) return hit.raw;
+  }
+  if (required) throw new Error('Required column not found. Tried: ' + candidates.join(', ') + '. Headers seen: ' + headers.join(', '));
+  return null;
+}
+
+/* === §3 APP STATE & CSV PARSING === */
+const AppState = {
+  fleetRows: [], txRows: [], fleetCols: {}, txCols: {},
+  models: [], selectedModel: null, selectedZone: null,
+  aggregated: new Map(), sortAsc: false,
+};
+
+function parseCSV(file) {
+  return new Promise((resolve, reject) => {
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      complete(r) {
+        if (!r.data || r.data.length === 0) { reject(new Error('"' + file.name + '" has no data rows.')); return; }
+        resolve({ headers: r.meta.fields, rows: r.data });
+      },
+      error(e) { reject(new Error('Parse error in "' + file.name + '": ' + e.message)); },
+    });
+  });
+}
+
+function resolveFleetCols(h) {
+  return { model: detectColumn(h, COL_FLEET_MODEL, true), fleetNo: detectColumn(h, COL_FLEET_FLEETNO, true), reg: detectColumn(h, COL_FLEET_REG, false) };
+}
+function resolveTxCols(h) {
+  return { fleetNo: detectColumn(h, COL_TX_FLEETNO, true), material: detectColumn(h, COL_TX_MATERIAL, true),
+           desc: detectColumn(h, COL_TX_DESC, true), group: detectColumn(h, COL_TX_GROUP, false),
+           qty: detectColumn(h, COL_TX_QTY, true), date: detectColumn(h, COL_TX_DATE, false) };
+}
+
+async function handleLoad() {
+  const fleetFile = document.getElementById('input-fleet').files[0];
+  const txFile    = document.getElementById('input-tx').files[0];
+  clearStatus();
+  if (!fleetFile || !txFile) { showStatus('error', 'Please select both CSV files before loading.'); return; }
+  try {
+    setLoadingState(true);
+    const [fr, tr] = await Promise.all([parseCSV(fleetFile), parseCSV(txFile)]);
+    AppState.fleetCols = resolveFleetCols(fr.headers);
+    AppState.txCols    = resolveTxCols(tr.headers);
+    AppState.fleetRows = fr.rows;
+    AppState.txRows    = tr.rows;
+    buildAggregatedData();
+    if (AppState.models.length === 0) {
+      showStatus('warn', 'No matching fleet numbers found between the two files. Check fleet number column format (e.g. leading zeros).');
+      return;
+    }
+    populateModelDropdown();
+    let msg = 'Loaded: ' + AppState.fleetRows.length.toLocaleString() + ' fleet records, ' + AppState.txRows.length.toLocaleString() + ' transactions. ' + AppState.models.length + ' bus model(s) found.';
+    if (!AppState.txCols.group) msg += ' Note: no material group column found — all parts will appear in General zone.';
+    showStatus(!AppState.txCols.group ? 'warn' : 'ok', msg);
+    showSection('model-section');
+    hideSection('diagram-section');
+  } catch(e) {
+    showStatus('error', e.message);
+  } finally {
+    setLoadingState(false);
+  }
+}
+
+/* === §4 DATA PROCESSING === */
+function buildFleetIndex() {
+  const idx = new Map();
+  for (const row of AppState.fleetRows) {
+    const fn    = String(row[AppState.fleetCols.fleetNo] ?? '').trim();
+    const model = String(row[AppState.fleetCols.model]   ?? '').trim();
+    if (fn && model) idx.set(fn.toLowerCase(), model);
+  }
+  return idx;
+}
+
+function classifyZone(groupText) {
+  const norm = String(groupText ?? '').toLowerCase();
+  for (const zone of ZONES) {
+    if (zone.id === 'general') continue;
+    for (const kw of zone.keywords) { if (norm.includes(kw)) return zone.id; }
+  }
+  return 'general';
+}
+
+function buildAggregatedData() {
+  const idx = buildFleetIndex();
+  const acc = new Map();
+  const { fleetNo: fc, material: mc, desc: dc, group: gc, qty: qc } = AppState.txCols;
+  for (const row of AppState.txRows) {
+    const qty = parseFloat(String(row[qc] ?? '').replace(/,/g, ''));
+    if (isNaN(qty) || qty <= 0) continue;
+    const fn    = String(row[fc] ?? '').trim();
+    const model = idx.get(fn.toLowerCase());
+    if (!model) continue;
+    const material = String(row[mc] ?? '').trim();
+    const desc     = String(row[dc] ?? '').trim();
+    const group    = gc ? String(row[gc] ?? '').trim() : '';
+    const zoneId   = classifyZone(group);
+    const mk = model.toLowerCase();
+    if (!acc.has(mk)) acc.set(mk, new Map());
+    const byZone = acc.get(mk);
+    if (!byZone.has(zoneId)) byZone.set(zoneId, new Map());
+    const byMat = byZone.get(zoneId);
+    const matKey = material.toLowerCase();
+    if (!byMat.has(matKey)) byMat.set(matKey, { material, desc, group, issues: 0 });
+    byMat.get(matKey).issues += qty;
+  }
+  AppState.aggregated = new Map();
+  for (const [mk, byZone] of acc) {
+    const zm = new Map();
+    for (const [zid, byMat] of byZone) {
+      zm.set(zid, Array.from(byMat.values()).sort((a, b) => b.issues - a.issues));
+    }
+    AppState.aggregated.set(mk, zm);
+  }
+  AppState.models = Array.from(AppState.aggregated.keys()).map(k => {
+    const row = AppState.fleetRows.find(r => String(r[AppState.fleetCols.model] ?? '').toLowerCase() === k);
+    return row ? String(row[AppState.fleetCols.model]).trim() : k;
+  }).sort((a, b) => a.localeCompare(b));
+}
+
+function populateModelDropdown() {
+  const sel = document.getElementById('model-select');
+  sel.innerHTML = '<option value="">-- Select bus model --</option>';
+  for (const m of AppState.models) {
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m;
+    sel.appendChild(o);
+  }
+}
+
+function handleModelChange(evt) {
+  const model = evt.target.value;
+  if (!model) { hideSection('diagram-section'); return; }
+  AppState.selectedModel = model;
+  AppState.selectedZone  = null;
+  AppState.sortAsc       = false;
+  document.querySelectorAll('.zone-group').forEach(g => g.classList.remove('zone-selected'));
+  document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('zone-selected'));
+  showSection('diagram-section');
+  renderDiagram();
+  clearPartsPanel();
+}
+
+/* === §5 SVG DIAGRAM === */
+function wireZoneInteractions() {
+  document.querySelectorAll('.zone-group').forEach(g => {
+    g.addEventListener('click', () => selectZone(g.dataset.zone));
+  });
+  document.querySelectorAll('.zone-btn').forEach(btn => {
+    btn.addEventListener('click', () => selectZone(btn.dataset.zone));
+  });
+}
+
+function selectZone(zoneId) {
+  if (AppState.selectedZone) {
+    const prev = document.getElementById('zone-' + AppState.selectedZone);
+    if (prev) prev.classList.remove('zone-selected');
+    const prevBtn = document.querySelector('.zone-btn[data-zone="' + AppState.selectedZone + '"]');
+    if (prevBtn) prevBtn.classList.remove('zone-selected');
+  }
+  AppState.selectedZone = zoneId;
+  AppState.sortAsc = false;
+  updateSortIndicator();
+  const svgG = document.getElementById('zone-' + zoneId);
+  if (svgG) svgG.classList.add('zone-selected');
+  const btn = document.querySelector('.zone-btn[data-zone="' + zoneId + '"]');
+  if (btn) btn.classList.add('zone-selected');
+  renderPartsPanel(zoneId);
+}
+
+function renderDiagram() {
+  const mk      = AppState.selectedModel.toLowerCase();
+  const zoneMap = AppState.aggregated.get(mk) ?? new Map();
+  for (const zone of ZONES) {
+    const count = (zoneMap.get(zone.id) ?? []).length;
+    const badge = document.getElementById(zone.badgeId);
+    if (!badge) continue;
+    if (zone.id === 'general') {
+      badge.textContent = count;
+      const btn = document.getElementById('btn-general');
+      if (btn) btn.style.display = count > 0 ? '' : 'none';
+    } else {
+      const txt = badge.querySelector('.badge-text');
+      if (txt) txt.textContent = count;
+      badge.setAttribute('visibility', count > 0 ? 'visible' : 'hidden');
+    }
+  }
+}
+
+/* === §6 PARTS PANEL === */
+function renderPartsPanel(zoneId) {
+  const zone    = ZONES.find(z => z.id === zoneId);
+  const mk      = AppState.selectedModel?.toLowerCase();
+  const allRows = AppState.aggregated.get(mk)?.get(zoneId) ?? [];
+  document.getElementById('parts-zone-title').textContent = zone?.label ?? zoneId;
+  const rows  = AppState.sortAsc ? [...allRows].sort((a, b) => a.issues - b.issues) : allRows;
+  const tbody = document.getElementById('parts-tbody');
+  tbody.innerHTML = '';
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="no-data">No parts data for this zone and model.</td></tr>';
+    return;
+  }
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + escHtml(row.material) + '</td>' +
+      '<td>' + escHtml(row.desc)     + '</td>' +
+      '<td>' + escHtml(row.group)    + '</td>' +
+      '<td class="issues-count">' + Math.round(row.issues) + '</td>';
+    tbody.appendChild(tr);
+  }
+}
+
+function clearPartsPanel() {
+  document.getElementById('parts-zone-title').textContent = 'Select a zone';
+  document.getElementById('parts-tbody').innerHTML = '<tr><td colspan="4" class="no-data">Click a zone on the diagram.</td></tr>';
+}
+
+function updateSortIndicator() {
+  const th = document.getElementById('th-issues');
+  if (th) th.innerHTML = 'Issues ' + (AppState.sortAsc ? '&#9650;' : '&#9660;');
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* === §7 UI UTILITIES === */
+function showSection(id) { document.getElementById(id).classList.remove('hidden'); }
+function hideSection(id) { document.getElementById(id).classList.add('hidden'); }
+
+function showStatus(type, msg) {
+  const bar = document.getElementById('status-bar');
+  bar.className = 'status-' + type;
+  bar.textContent = msg;
+  bar.classList.remove('hidden');
+}
+function clearStatus() {
+  const bar = document.getElementById('status-bar');
+  bar.className = ''; bar.textContent = '';
+  bar.classList.add('hidden');
+}
+function setLoadingState(on) {
+  const btn = document.getElementById('btn-load');
+  btn.disabled = on; btn.textContent = on ? 'Loading…' : 'Load';
+}
+
+/* === §8 INIT === */
+document.addEventListener('DOMContentLoaded', () => {
+  wireZoneInteractions();
+  document.getElementById('btn-load').addEventListener('click', handleLoad);
+  document.getElementById('model-select').addEventListener('change', handleModelChange);
+  document.getElementById('th-issues').addEventListener('click', () => {
+    if (!AppState.selectedZone) return;
+    AppState.sortAsc = !AppState.sortAsc;
+    updateSortIndicator();
+    renderPartsPanel(AppState.selectedZone);
+  });
+});
+
+</script>
+</body>
+</html>
