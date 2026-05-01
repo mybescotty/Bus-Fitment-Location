@@ -9,6 +9,7 @@
       --fb-magenta: #E4007C;
       --fb-navy:    #1D2B5F;
       --zone-engine:  #B41E2A;
+      --zone-cooling: #1A7FC1;
       --zone-brakes:  #2E6B9E;
       --zone-doors:   #C07800;
       --zone-elec:    #007A6E;
@@ -79,7 +80,8 @@
     .zone-group { cursor: pointer; opacity: 0.18; transition: opacity 0.2s; }
     .zone-group:hover { opacity: 0.50; }
     .zone-group.zone-selected { opacity: 0.62; }
-    #zone-engine     rect, #zone-engine     circle { fill: var(--zone-engine); stroke: #8B1020; stroke-width: 2.5; }
+    #zone-engine     rect, #zone-engine     circle { fill: var(--zone-engine);   stroke: #8B1020; stroke-width: 2.5; }
+    #zone-cooling    rect, #zone-cooling    circle { fill: var(--zone-cooling);  stroke: #0F5A8A; stroke-width: 2.5; }
     #zone-brakes     rect, #zone-brakes     circle { fill: var(--zone-brakes); stroke: #1A4A6E; stroke-width: 2.5; }
     #zone-doors      rect, #zone-doors      circle { fill: var(--zone-doors);  stroke: #8A5600; stroke-width: 2.5; }
     #zone-electrical rect, #zone-electrical circle { fill: var(--zone-elec);   stroke: #005548; stroke-width: 2.5; }
@@ -191,6 +193,10 @@
             <circle cx="712" cy="272" r="48"/>
             <rect x="52" y="224" width="796" height="23" rx="4"/>
           </g>
+          <g id="zone-cooling" class="zone-group" data-zone="cooling">
+            <title>Cooling System</title>
+            <rect x="750" y="52" width="54" height="193" rx="6"/>
+          </g>
           <g id="zone-engine" class="zone-group" data-zone="engine">
             <title>Engine &amp; Drivetrain</title>
             <rect x="804" y="52" width="46" height="193" rx="10"/>
@@ -198,6 +204,10 @@
 
           <!-- BADGES -->
           <g id="badges" pointer-events="none">
+            <g id="badge-cooling" class="zone-badge" visibility="hidden">
+              <circle class="badge-circle" cx="777" cy="148" r="15"/>
+              <text class="badge-text" x="777" y="148" text-anchor="middle" dominant-baseline="central">0</text>
+            </g>
             <g id="badge-engine" class="zone-badge" visibility="hidden">
               <circle class="badge-circle" cx="827" cy="148" r="15"/>
               <text class="badge-text" x="827" y="148" text-anchor="middle" dominant-baseline="central">0</text>
@@ -221,6 +231,7 @@
 
       <div class="zone-legend">
         <div class="legend-item"><div class="legend-dot" style="background:var(--zone-engine)"></div><span>Engine &amp; Drivetrain</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--zone-cooling)"></div><span>Cooling System</span></div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--zone-brakes)"></div><span>Brakes, Wheels &amp; Suspension</span></div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--zone-doors)"></div><span>Doors &amp; Body</span></div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--zone-elec)"></div><span>Electrical, HVAC &amp; Interior</span></div>
@@ -265,9 +276,15 @@
 const ZONES = [
   {
     id: 'engine', label: 'Engine & Drivetrain',
-    keywords: ['engine','gearbox','transmission','coolant','fuel','exhaust','oil','clutch',
-                'propshaft','turbo','injector','pump','radiator','intercooler','crankshaft'],
+    keywords: ['engine','gearbox','transmission','fuel','exhaust','oil','clutch',
+                'propshaft','turbo','injector','crankshaft','camshaft','piston'],
     svgGroupId: 'zone-engine', badgeId: 'badge-engine',
+  },
+  {
+    id: 'cooling', label: 'Cooling System',
+    keywords: ['coolant','radiator','intercooler','thermostat','water pump','antifreeze',
+                'cooling','coolant pump','expansion tank','hose','header tank'],
+    svgGroupId: 'zone-cooling', badgeId: 'badge-cooling',
   },
   {
     id: 'brakes', label: 'Brakes, Wheels & Suspension',
