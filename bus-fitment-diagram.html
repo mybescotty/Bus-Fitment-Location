@@ -62,6 +62,9 @@
 
     #parts-panel { width: 400px; flex-shrink: 0; background: white; border-radius: 8px; border: 1px solid #DDE1E8; display: flex; flex-direction: column; max-height: 520px; }
     #parts-zone-title { padding: 14px 16px 10px; font-size: 15px; font-weight: 700; color: var(--fb-navy); border-bottom: 2px solid var(--fb-magenta); flex-shrink: 0; }
+    #parts-search-wrap { padding: 8px 12px; border-bottom: 1px solid #DDE1E8; flex-shrink: 0; }
+    #parts-search { width: 100%; padding: 7px 10px; border: 1px solid #CDD1D8; border-radius: 5px; font-size: 13px; outline: none; }
+    #parts-search:focus { border-color: var(--fb-navy); box-shadow: 0 0 0 2px rgba(29,43,95,0.15); }
     #parts-table-wrapper { overflow-y: auto; flex: 1; }
     #parts-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     #parts-table thead th { position: sticky; top: 0; background: var(--fb-navy); color: white; padding: 8px 10px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -232,6 +235,9 @@
 
     <aside id="parts-panel">
       <h2 id="parts-zone-title">Select a zone</h2>
+      <div id="parts-search-wrap" class="hidden">
+        <input type="search" id="parts-search" placeholder="Search part number or description…">
+      </div>
       <div id="parts-table-wrapper">
         <table id="parts-table">
           <thead>
@@ -510,11 +516,20 @@ function renderPartsPanel(zoneId) {
   const mk      = AppState.selectedModel?.toLowerCase();
   const allRows = AppState.aggregated.get(mk)?.get(zoneId) ?? [];
   document.getElementById('parts-zone-title').textContent = zone?.label ?? zoneId;
-  const rows  = AppState.sortAsc ? [...allRows].sort((a, b) => a.issues - b.issues) : allRows;
+  document.getElementById('parts-search-wrap').classList.toggle('hidden', allRows.length === 0);
+
+  const term = document.getElementById('parts-search').value.toLowerCase().trim();
+  let rows = AppState.sortAsc ? [...allRows].sort((a, b) => a.issues - b.issues) : allRows;
+  if (term) rows = rows.filter(r => r.desc.toLowerCase().includes(term) || r.material.toLowerCase().includes(term));
+
   const tbody = document.getElementById('parts-tbody');
   tbody.innerHTML = '';
-  if (rows.length === 0) {
+  if (allRows.length === 0) {
     tbody.innerHTML = '<tr><td colspan="4" class="no-data">No parts data for this zone and model.</td></tr>';
+    return;
+  }
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="no-data">No parts match &ldquo;' + escHtml(term) + '&rdquo;.</td></tr>';
     return;
   }
   for (const row of rows) {
@@ -530,6 +545,8 @@ function renderPartsPanel(zoneId) {
 
 function clearPartsPanel() {
   document.getElementById('parts-zone-title').textContent = 'Select a zone';
+  document.getElementById('parts-search').value = '';
+  document.getElementById('parts-search-wrap').classList.add('hidden');
   document.getElementById('parts-tbody').innerHTML = '<tr><td colspan="4" class="no-data">Click a zone on the diagram.</td></tr>';
 }
 
@@ -572,6 +589,9 @@ document.addEventListener('DOMContentLoaded', () => {
     AppState.sortAsc = !AppState.sortAsc;
     updateSortIndicator();
     renderPartsPanel(AppState.selectedZone);
+  });
+  document.getElementById('parts-search').addEventListener('input', () => {
+    if (AppState.selectedZone) renderPartsPanel(AppState.selectedZone);
   });
 });
 
