@@ -77,6 +77,24 @@
     .issues-count { font-weight: 700; color: var(--fb-navy); text-align: right !important; }
     .no-data { text-align: center !important; color: #8C96A6; padding: 24px !important; font-style: italic; }
 
+    .part-row { cursor: pointer; }
+    .part-row:hover td { background: #D8E4F5 !important; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal-card { background: white; border-radius: 10px; width: 100%; max-width: 620px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.25); overflow: hidden; }
+    .modal-header { background: var(--fb-navy); color: white; padding: 14px 18px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-shrink: 0; border-bottom: 3px solid var(--fb-magenta); }
+    .modal-part-no { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.75; margin-bottom: 3px; }
+    .modal-part-desc { font-size: 16px; font-weight: 700; }
+    .modal-close { background: none; border: none; color: white; font-size: 22px; cursor: pointer; line-height: 1; padding: 0; opacity: 0.8; flex-shrink: 0; }
+    .modal-close:hover { opacity: 1; }
+    #modal-body { overflow-y: auto; flex: 1; }
+    #modal-body table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #modal-body thead th { position: sticky; top: 0; background: var(--fb-navy); color: white; padding: 8px 12px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+    #modal-body tbody tr:nth-child(even) { background: #F8F9FB; }
+    #modal-body tbody td { padding: 9px 12px; border-bottom: 1px solid #EAECF0; }
+    .modal-qty { font-weight: 700; color: var(--fb-navy); text-align: right !important; }
+    .modal-empty { text-align: center; color: #8C96A6; padding: 28px; font-style: italic; }
+
     .zone-group { cursor: pointer; opacity: 0.18; transition: opacity 0.2s; }
     .zone-group:hover { opacity: 0.50; }
     .zone-group.zone-selected { opacity: 0.62; }
@@ -118,6 +136,10 @@
       <div class="file-group">
         <label for="input-tx">Transaction History CSV</label>
         <input type="file" id="input-tx" accept=".csv">
+      </div>
+      <div class="file-group">
+        <label for="input-stock">Stock File CSV <span style="font-weight:400;opacity:0.7">(optional)</span></label>
+        <input type="file" id="input-stock" accept=".csv">
       </div>
       <button id="btn-load" class="btn-primary">Load</button>
     </div>
@@ -269,6 +291,19 @@
 
 </main>
 
+<div id="stock-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <div id="modal-part-no" class="modal-part-no"></div>
+        <div id="modal-part-desc" class="modal-part-desc"></div>
+      </div>
+      <button id="modal-close" class="modal-close">&times;</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
 
@@ -320,6 +355,10 @@ const COL_TX_DESC       = ['partdesc','part desc','description','material desc',
 const COL_TX_GROUP      = ['mtlgroupdesc','mtlgroup','material group','mat group','group desc','group description','mat grp'];
 const COL_TX_QTY        = ['qty','quantity','issued qty','total qty','issue qty','movement qty'];
 const COL_TX_DATE       = ['posting date','issue date','date','movement date'];
+const COL_STOCK_PART  = ['part','material','part no','part number','material no','material number'];
+const COL_STOCK_DEPOT = ['depotdesc','depot desc','depot','store','location','plant'];
+const COL_STOCK_BIN   = ['bin','bin location','bin no','bin number','bin loc'];
+const COL_STOCK_QTY   = ['qty','on hand','qty on hand','unrestricted','stock qty','quantity'];
 
 function normaliseHeader(s) {
   return String(s).toLowerCase().trim().replace(/\s+/g, ' ');
@@ -344,6 +383,7 @@ function detectColumn(headers, candidates, required) {
 /* === §3 APP STATE & CSV PARSING === */
 const AppState = {
   fleetRows: [], txRows: [], fleetCols: {}, txCols: {},
+  stockRows: [], stockCols: {}, stockIndex: new Map(),
   models: [], selectedModel: null, selectedZone: null,
   aggregated: new Map(), sortAsc: false,
 };
@@ -370,25 +410,61 @@ function resolveTxCols(h) {
            qty: detectColumn(h, COL_TX_QTY, true), date: detectColumn(h, COL_TX_DATE, false) };
 }
 
+function resolveStockCols(h) {
+  return {
+    part:  detectColumn(h, COL_STOCK_PART,  true),
+    depot: detectColumn(h, COL_STOCK_DEPOT, false),
+    bin:   detectColumn(h, COL_STOCK_BIN,   false),
+    qty:   detectColumn(h, COL_STOCK_QTY,   false),
+  };
+}
+
+function buildStockIndex() {
+  AppState.stockIndex = new Map();
+  const { part: pc, depot: dc, bin: bc, qty: qc } = AppState.stockCols;
+  for (const row of AppState.stockRows) {
+    const key = String(row[pc] ?? '').trim().toLowerCase();
+    if (!key) continue;
+    if (!AppState.stockIndex.has(key)) AppState.stockIndex.set(key, []);
+    AppState.stockIndex.get(key).push({
+      depot: dc ? String(row[dc] ?? '').trim() : '',
+      bin:   bc ? String(row[bc] ?? '').trim() : '',
+      qty:   qc ? parseFloat(String(row[qc] ?? '').replace(/,/g,'')) || 0 : 0,
+    });
+  }
+}
+
 async function handleLoad() {
   const fleetFile = document.getElementById('input-fleet').files[0];
   const txFile    = document.getElementById('input-tx').files[0];
+  const stockFile = document.getElementById('input-stock').files[0];
   clearStatus();
-  if (!fleetFile || !txFile) { showStatus('error', 'Please select both CSV files before loading.'); return; }
+  if (!fleetFile || !txFile) { showStatus('error', 'Please select both Fleet and Transaction CSV files before loading.'); return; }
   try {
     setLoadingState(true);
-    const [fr, tr] = await Promise.all([parseCSV(fleetFile), parseCSV(txFile)]);
+    const promises = [parseCSV(fleetFile), parseCSV(txFile)];
+    if (stockFile) promises.push(parseCSV(stockFile));
+    const results = await Promise.all(promises);
+    const [fr, tr] = results;
     AppState.fleetCols = resolveFleetCols(fr.headers);
     AppState.txCols    = resolveTxCols(tr.headers);
     AppState.fleetRows = fr.rows;
     AppState.txRows    = tr.rows;
+    if (stockFile && results[2]) {
+      AppState.stockCols = resolveStockCols(results[2].headers);
+      AppState.stockRows = results[2].rows;
+      buildStockIndex();
+    } else {
+      AppState.stockRows = []; AppState.stockIndex = new Map();
+    }
     buildAggregatedData();
     if (AppState.models.length === 0) {
       showStatus('warn', 'No matching fleet numbers found between the two files. Check fleet number column format (e.g. leading zeros).');
       return;
     }
     populateModelDropdown();
-    let msg = 'Loaded: ' + AppState.fleetRows.length.toLocaleString() + ' fleet records, ' + AppState.txRows.length.toLocaleString() + ' transactions. ' + AppState.models.length + ' bus model(s) found.';
+    let msg = 'Loaded: ' + AppState.fleetRows.length.toLocaleString() + ' fleet records, ' + AppState.txRows.length.toLocaleString() + ' transactions, ' + AppState.models.length + ' bus model(s) found.';
+    if (stockFile) msg += ' Stock file: ' + AppState.stockRows.length.toLocaleString() + ' records.';
     if (!AppState.txCols.group) msg += ' Note: no material group column found — all parts will appear in General zone.';
     showStatus(!AppState.txCols.group ? 'warn' : 'ok', msg);
     showSection('model-section');
@@ -550,13 +626,42 @@ function renderPartsPanel(zoneId) {
   }
   for (const row of rows) {
     const tr = document.createElement('tr');
+    tr.className = 'part-row';
+    tr.title = 'Click to view stock locations';
     tr.innerHTML =
       '<td>' + escHtml(row.material) + '</td>' +
       '<td>' + escHtml(row.desc)     + '</td>' +
       '<td>' + escHtml(row.group)    + '</td>' +
       '<td class="issues-count">' + Math.round(row.issues) + '</td>';
+    tr.addEventListener('click', () => showStockModal(row.material, row.desc));
     tbody.appendChild(tr);
   }
+}
+
+function showStockModal(partNo, partDesc) {
+  document.getElementById('modal-part-no').textContent = partNo;
+  document.getElementById('modal-part-desc').textContent = partDesc;
+  const body = document.getElementById('modal-body');
+  const key  = partNo.toLowerCase().trim();
+  const rows = AppState.stockIndex.get(key);
+
+  if (!AppState.stockRows.length) {
+    body.innerHTML = '<p class="modal-empty">No stock file loaded. Add the Stock File CSV and reload to see bin locations.</p>';
+  } else if (!rows || rows.length === 0) {
+    body.innerHTML = '<p class="modal-empty">No stock records found for part ' + escHtml(partNo) + '.</p>';
+  } else {
+    let html = '<table><thead><tr><th>Depot</th><th>Bin</th><th style="text-align:right">Qty</th></tr></thead><tbody>';
+    for (const r of rows) {
+      html += '<tr><td>' + escHtml(r.depot) + '</td><td>' + escHtml(r.bin) + '</td><td class="modal-qty">' + r.qty + '</td></tr>';
+    }
+    html += '</tbody></table>';
+    body.innerHTML = html;
+  }
+  document.getElementById('stock-modal').classList.remove('hidden');
+}
+
+function hideStockModal() {
+  document.getElementById('stock-modal').classList.add('hidden');
 }
 
 function clearPartsPanel() {
@@ -609,6 +714,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('parts-search').addEventListener('input', () => {
     if (AppState.selectedZone) renderPartsPanel(AppState.selectedZone);
   });
+  document.getElementById('modal-close').addEventListener('click', hideStockModal);
+  document.getElementById('stock-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) hideStockModal();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hideStockModal(); });
 });
 
 </script>
