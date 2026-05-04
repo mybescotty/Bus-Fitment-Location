@@ -42,9 +42,10 @@
     .status-warn  { background: #FFF8E1; color: #7A5800; border: 1px solid #F0D070; }
     .status-error { background: #FDECEA; color: #8B1A1A; border: 1px solid #F0AAAA; }
 
-    #model-section { display: flex; justify-content: center; align-items: center; }
-    #model-section label { font-size: 12px; font-weight: 600; color: var(--fb-navy); text-transform: uppercase; letter-spacing: 0.05em; margin-right: 12px; }
-    #model-select { padding: 8px 12px; border: 1px solid #CDD1D8; border-radius: 5px; font-size: 14px; font-weight: 500; min-width: 280px; background: white; cursor: pointer; }
+    #model-section { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 20px; }
+    #model-section label { font-size: 12px; font-weight: 600; color: var(--fb-navy); text-transform: uppercase; letter-spacing: 0.05em; margin-right: 8px; }
+    #model-select, #fleet-select { padding: 8px 12px; border: 1px solid #CDD1D8; border-radius: 5px; font-size: 14px; font-weight: 500; min-width: 240px; background: white; cursor: pointer; }
+    .picker-group { display: flex; align-items: center; }
 
     #diagram-section { display: flex; gap: 20px; align-items: flex-start; }
     #diagram-container { flex: 1 1 auto; min-width: 0; }
@@ -148,10 +149,14 @@
   <div id="status-bar" class="hidden"></div>
 
   <section id="model-section" class="hidden card">
-    <label for="model-select">Bus Model</label>
-    <select id="model-select">
-      <option value="">-- Select bus model --</option>
-    </select>
+    <div class="picker-group">
+      <label for="model-select">Bus Model</label>
+      <select id="model-select"><option value="">-- Select bus model --</option></select>
+    </div>
+    <div class="picker-group">
+      <label for="fleet-select">Fleet Number</label>
+      <select id="fleet-select" disabled><option value="">-- Select model first --</option></select>
+    </div>
   </section>
 
   <section id="diagram-section" class="hidden">
@@ -384,8 +389,8 @@ function detectColumn(headers, candidates, required) {
 const AppState = {
   fleetRows: [], txRows: [], fleetCols: {}, txCols: {},
   stockRows: [], stockCols: {}, stockIndex: new Map(),
-  models: [], selectedModel: null, selectedZone: null,
-  aggregated: new Map(), sortAsc: false,
+  models: [], selectedModel: null, selectedFleet: null, selectedZone: null,
+  aggregated: new Map(), fleetAggregated: new Map(), modelFleets: new Map(), sortAsc: false,
 };
 
 function parseCSV(file) {
@@ -496,9 +501,33 @@ function classifyZone(groupText) {
   return 'general';
 }
 
+function accumulate(acc, key, zoneId, material, desc, group, qty) {
+  if (!acc.has(key)) acc.set(key, new Map());
+  const byZone = acc.get(key);
+  if (!byZone.has(zoneId)) byZone.set(zoneId, new Map());
+  const byMat = byZone.get(zoneId);
+  const matKey = material.toLowerCase();
+  if (!byMat.has(matKey)) byMat.set(matKey, { material, desc, group, issues: 0 });
+  byMat.get(matKey).issues += qty;
+}
+
+function finalise(acc) {
+  const out = new Map();
+  for (const [key, byZone] of acc) {
+    const zm = new Map();
+    for (const [zid, byMat] of byZone) {
+      zm.set(zid, Array.from(byMat.values()).sort((a, b) => b.issues - a.issues));
+    }
+    out.set(key, zm);
+  }
+  return out;
+}
+
 function buildAggregatedData() {
   const idx = buildFleetIndex();
-  const acc = new Map();
+  const accModel = new Map();
+  const accFleet = new Map();
+  const mf       = new Map(); // model → Set<fleetNo>
   const { fleetNo: fc, material: mc, desc: dc, group: gc, qty: qc } = AppState.txCols;
   for (const row of AppState.txRows) {
     const qty = parseFloat(String(row[qc] ?? '').replace(/,/g, ''));
@@ -511,22 +540,18 @@ function buildAggregatedData() {
     const group    = gc ? String(row[gc] ?? '').trim() : '';
     const zoneId   = classifyZone(group);
     const mk = model.toLowerCase();
-    if (!acc.has(mk)) acc.set(mk, new Map());
-    const byZone = acc.get(mk);
-    if (!byZone.has(zoneId)) byZone.set(zoneId, new Map());
-    const byMat = byZone.get(zoneId);
-    const matKey = material.toLowerCase();
-    if (!byMat.has(matKey)) byMat.set(matKey, { material, desc, group, issues: 0 });
-    byMat.get(matKey).issues += qty;
+    accumulate(accModel, mk,  zoneId, material, desc, group, qty);
+    accumulate(accFleet, fn,  zoneId, material, desc, group, qty);
+    if (!mf.has(mk)) mf.set(mk, new Set());
+    mf.get(mk).add(fn);
   }
-  AppState.aggregated = new Map();
-  for (const [mk, byZone] of acc) {
-    const zm = new Map();
-    for (const [zid, byMat] of byZone) {
-      zm.set(zid, Array.from(byMat.values()).sort((a, b) => b.issues - a.issues));
-    }
-    AppState.aggregated.set(mk, zm);
-  }
+  AppState.aggregated     = finalise(accModel);
+  AppState.fleetAggregated = finalise(accFleet);
+  AppState.modelFleets    = new Map(
+    Array.from(mf.entries()).map(([mk, set]) => [
+      mk, Array.from(set).sort((a, b) => parseInt(a) - parseInt(b) || a.localeCompare(b))
+    ])
+  );
   AppState.models = Array.from(AppState.aggregated.keys()).map(k => {
     const row = AppState.fleetRows.find(r => String(r[AppState.fleetCols.model] ?? '').toLowerCase() === k);
     return row ? String(row[AppState.fleetCols.model]).trim() : k;
@@ -543,17 +568,54 @@ function populateModelDropdown() {
   }
 }
 
+function populateFleetDropdown(model) {
+  const sel = document.getElementById('fleet-select');
+  const fleets = AppState.modelFleets.get(model.toLowerCase()) ?? [];
+  sel.innerHTML = '<option value="">All ' + escHtml(model) + ' buses (' + fleets.length + ')</option>';
+  for (const fn of fleets) {
+    const o = document.createElement('option');
+    o.value = fn; o.textContent = fn;
+    sel.appendChild(o);
+  }
+  sel.disabled = false;
+}
+
 function handleModelChange(evt) {
   const model = evt.target.value;
-  if (!model) { hideSection('diagram-section'); return; }
+  if (!model) {
+    document.getElementById('fleet-select').innerHTML = '<option value="">-- Select model first --</option>';
+    document.getElementById('fleet-select').disabled = true;
+    hideSection('diagram-section');
+    return;
+  }
   AppState.selectedModel = model;
+  AppState.selectedFleet = null;
   AppState.selectedZone  = null;
   AppState.sortAsc       = false;
+  populateFleetDropdown(model);
   document.querySelectorAll('.zone-group').forEach(g => g.classList.remove('zone-selected'));
   document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('zone-selected'));
   showSection('diagram-section');
   renderDiagram();
   clearPartsPanel();
+}
+
+function handleFleetChange(evt) {
+  const fleet = evt.target.value;
+  AppState.selectedFleet = fleet || null;
+  AppState.selectedZone  = null;
+  AppState.sortAsc       = false;
+  document.querySelectorAll('.zone-group').forEach(g => g.classList.remove('zone-selected'));
+  document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('zone-selected'));
+  renderDiagram();
+  clearPartsPanel();
+}
+
+function getZoneRows(zoneId) {
+  if (AppState.selectedFleet) {
+    return AppState.fleetAggregated.get(AppState.selectedFleet)?.get(zoneId) ?? [];
+  }
+  return AppState.aggregated.get(AppState.selectedModel?.toLowerCase())?.get(zoneId) ?? [];
 }
 
 /* === §5 SVG DIAGRAM === */
@@ -584,10 +646,8 @@ function selectZone(zoneId) {
 }
 
 function renderDiagram() {
-  const mk      = AppState.selectedModel.toLowerCase();
-  const zoneMap = AppState.aggregated.get(mk) ?? new Map();
   for (const zone of ZONES) {
-    const count = (zoneMap.get(zone.id) ?? []).length;
+    const count = getZoneRows(zone.id).length;
     const badge = document.getElementById(zone.badgeId);
     if (!badge) continue;
     if (zone.id === 'general') {
@@ -605,8 +665,7 @@ function renderDiagram() {
 /* === §6 PARTS PANEL === */
 function renderPartsPanel(zoneId) {
   const zone    = ZONES.find(z => z.id === zoneId);
-  const mk      = AppState.selectedModel?.toLowerCase();
-  const allRows = AppState.aggregated.get(mk)?.get(zoneId) ?? [];
+  const allRows = getZoneRows(zoneId);
   document.getElementById('parts-zone-title').textContent = zone?.label ?? zoneId;
   document.getElementById('parts-search-wrap').classList.toggle('hidden', allRows.length === 0);
 
@@ -705,6 +764,7 @@ document.addEventListener('DOMContentLoaded', () => {
   wireZoneInteractions();
   document.getElementById('btn-load').addEventListener('click', handleLoad);
   document.getElementById('model-select').addEventListener('change', handleModelChange);
+  document.getElementById('fleet-select').addEventListener('change', handleFleetChange);
   document.getElementById('th-issues').addEventListener('click', () => {
     if (!AppState.selectedZone) return;
     AppState.sortAsc = !AppState.sortAsc;
