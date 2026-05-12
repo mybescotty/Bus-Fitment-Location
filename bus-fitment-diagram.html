@@ -63,7 +63,11 @@
     .zone-btn.zone-selected .btn-badge { background: white; color: var(--fb-navy); }
 
     #parts-panel { width: 400px; flex-shrink: 0; background: white; border-radius: 8px; border: 1px solid #DDE1E8; display: flex; flex-direction: column; max-height: 520px; }
-    #parts-zone-title { padding: 14px 16px 10px; font-size: 15px; font-weight: 700; color: var(--fb-navy); border-bottom: 2px solid var(--fb-magenta); flex-shrink: 0; }
+    #parts-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 10px; border-bottom: 2px solid var(--fb-magenta); flex-shrink: 0; gap: 8px; }
+    #parts-zone-title { font-size: 15px; font-weight: 700; color: var(--fb-navy); }
+    #btn-export { background: none; border: 1px solid var(--fb-navy); color: var(--fb-navy); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.04em; transition: background 0.15s, color 0.15s; }
+    #btn-export:hover { background: var(--fb-navy); color: white; }
+    #btn-export.hidden { display: none; }
     #parts-search-wrap { padding: 8px 12px; border-bottom: 1px solid #DDE1E8; flex-shrink: 0; }
     #parts-search { width: 100%; padding: 7px 10px; border: 1px solid #CDD1D8; border-radius: 5px; font-size: 13px; outline: none; }
     #parts-search:focus { border-color: var(--fb-navy); box-shadow: 0 0 0 2px rgba(29,43,95,0.15); }
@@ -106,7 +110,8 @@
     #zone-electrical rect, #zone-electrical circle { fill: var(--zone-elec);   stroke: #005548; stroke-width: 2.5; }
     .zone-badge { pointer-events: none; }
     .badge-circle { fill: var(--fb-navy); }
-    .badge-text { font-size: 11px; font-weight: 700; fill: white; font-family: 'Segoe UI', Arial, sans-serif; }
+    .badge-count  { font-size: 9px;  font-weight: 600; fill: rgba(255,255,255,0.8); font-family: 'Segoe UI', Arial, sans-serif; }
+    .badge-issues { font-size: 11px; font-weight: 700; fill: white;                 font-family: 'Segoe UI', Arial, sans-serif; }
 
     @media (max-width: 900px) {
       #diagram-section { flex-direction: column; }
@@ -232,24 +237,29 @@
           <!-- BADGES -->
           <g id="badges" pointer-events="none">
             <g id="badge-cooling" class="zone-badge" visibility="hidden">
-              <circle class="badge-circle" cx="777" cy="148" r="15"/>
-              <text class="badge-text" x="777" y="148" text-anchor="middle" dominant-baseline="central">0</text>
+              <circle class="badge-circle" cx="777" cy="148" r="22"/>
+              <text class="badge-count"  x="777" y="141" text-anchor="middle" dominant-baseline="central">0 pts</text>
+              <text class="badge-issues" x="777" y="156" text-anchor="middle" dominant-baseline="central">0</text>
             </g>
             <g id="badge-engine" class="zone-badge" visibility="hidden">
-              <circle class="badge-circle" cx="827" cy="148" r="15"/>
-              <text class="badge-text" x="827" y="148" text-anchor="middle" dominant-baseline="central">0</text>
+              <circle class="badge-circle" cx="827" cy="148" r="22"/>
+              <text class="badge-count"  x="827" y="141" text-anchor="middle" dominant-baseline="central">0 pts</text>
+              <text class="badge-issues" x="827" y="156" text-anchor="middle" dominant-baseline="central">0</text>
             </g>
             <g id="badge-brakes" class="zone-badge" visibility="hidden">
-              <circle class="badge-circle" cx="443" cy="262" r="15"/>
-              <text class="badge-text" x="443" y="262" text-anchor="middle" dominant-baseline="central">0</text>
+              <circle class="badge-circle" cx="443" cy="262" r="22"/>
+              <text class="badge-count"  x="443" y="255" text-anchor="middle" dominant-baseline="central">0 pts</text>
+              <text class="badge-issues" x="443" y="270" text-anchor="middle" dominant-baseline="central">0</text>
             </g>
             <g id="badge-doors" class="zone-badge" visibility="hidden">
-              <circle class="badge-circle" cx="112" cy="185" r="15"/>
-              <text class="badge-text" x="112" y="185" text-anchor="middle" dominant-baseline="central">0</text>
+              <circle class="badge-circle" cx="112" cy="185" r="22"/>
+              <text class="badge-count"  x="112" y="178" text-anchor="middle" dominant-baseline="central">0 pts</text>
+              <text class="badge-issues" x="112" y="193" text-anchor="middle" dominant-baseline="central">0</text>
             </g>
             <g id="badge-electrical" class="zone-badge" visibility="hidden">
-              <circle class="badge-circle" cx="500" cy="105" r="15"/>
-              <text class="badge-text" x="500" y="105" text-anchor="middle" dominant-baseline="central">0</text>
+              <circle class="badge-circle" cx="500" cy="105" r="22"/>
+              <text class="badge-count"  x="500" y="98"  text-anchor="middle" dominant-baseline="central">0 pts</text>
+              <text class="badge-issues" x="500" y="113" text-anchor="middle" dominant-baseline="central">0</text>
             </g>
           </g>
 
@@ -272,7 +282,10 @@
     </div>
 
     <aside id="parts-panel">
-      <h2 id="parts-zone-title">Select a zone</h2>
+      <div id="parts-panel-header">
+        <h2 id="parts-zone-title">Select a zone</h2>
+        <button id="btn-export" class="hidden">Export CSV</button>
+      </div>
       <div id="parts-search-wrap" class="hidden">
         <input type="search" id="parts-search" placeholder="Search part number or description…">
       </div>
@@ -647,19 +660,29 @@ function selectZone(zoneId) {
 
 function renderDiagram() {
   for (const zone of ZONES) {
-    const count = getZoneRows(zone.id).length;
-    const badge = document.getElementById(zone.badgeId);
+    const rows   = getZoneRows(zone.id);
+    const count  = rows.length;
+    const total  = Math.round(rows.reduce((s, r) => s + r.issues, 0));
+    const badge  = document.getElementById(zone.badgeId);
     if (!badge) continue;
     if (zone.id === 'general') {
       badge.textContent = count;
       const btn = document.getElementById('btn-general');
       if (btn) btn.style.display = count > 0 ? '' : 'none';
     } else {
-      const txt = badge.querySelector('.badge-text');
-      if (txt) txt.textContent = count;
+      const cEl = badge.querySelector('.badge-count');
+      const iEl = badge.querySelector('.badge-issues');
+      if (cEl) cEl.textContent = count + ' pts';
+      if (iEl) iEl.textContent = fmtIssues(total);
       badge.setAttribute('visibility', count > 0 ? 'visible' : 'hidden');
     }
   }
+}
+
+function fmtIssues(n) {
+  if (n >= 10000) return Math.round(n / 1000) + 'k';
+  if (n >= 1000)  return (n / 1000).toFixed(1) + 'k';
+  return String(n);
 }
 
 /* === §6 PARTS PANEL === */
@@ -668,6 +691,7 @@ function renderPartsPanel(zoneId) {
   const allRows = getZoneRows(zoneId);
   document.getElementById('parts-zone-title').textContent = zone?.label ?? zoneId;
   document.getElementById('parts-search-wrap').classList.toggle('hidden', allRows.length === 0);
+  document.getElementById('btn-export').classList.toggle('hidden', allRows.length === 0);
 
   const term = document.getElementById('parts-search').value.toLowerCase().trim();
   let rows = AppState.sortAsc ? [...allRows].sort((a, b) => a.issues - b.issues) : allRows;
@@ -695,6 +719,29 @@ function renderPartsPanel(zoneId) {
     tr.addEventListener('click', () => showStockModal(row.material, row.desc));
     tbody.appendChild(tr);
   }
+}
+
+function exportZoneCSV() {
+  const zoneId = AppState.selectedZone;
+  if (!zoneId) return;
+  const zone    = ZONES.find(z => z.id === zoneId);
+  const allRows = getZoneRows(zoneId);
+  const term    = document.getElementById('parts-search').value.toLowerCase().trim();
+  let rows = AppState.sortAsc ? [...allRows].sort((a, b) => a.issues - b.issues) : allRows;
+  if (term) rows = rows.filter(r => r.desc.toLowerCase().includes(term) || r.material.toLowerCase().includes(term));
+  const model = AppState.selectedFleet ? AppState.selectedFleet : (AppState.selectedModel ?? 'unknown');
+  const lines = [
+    ['Part No.','Description','Group','Issues'].join(','),
+    ...rows.map(r => [r.material, r.desc, r.group, Math.round(r.issues)]
+      .map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','))
+  ];
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = ('fitment-' + model + '-' + (zone?.id ?? zoneId) + '.csv').replace(/\s+/g, '-');
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function showStockModal(partNo, partDesc) {
@@ -727,6 +774,7 @@ function clearPartsPanel() {
   document.getElementById('parts-zone-title').textContent = 'Select a zone';
   document.getElementById('parts-search').value = '';
   document.getElementById('parts-search-wrap').classList.add('hidden');
+  document.getElementById('btn-export').classList.add('hidden');
   document.getElementById('parts-tbody').innerHTML = '<tr><td colspan="4" class="no-data">Click a zone on the diagram.</td></tr>';
 }
 
@@ -774,6 +822,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('parts-search').addEventListener('input', () => {
     if (AppState.selectedZone) renderPartsPanel(AppState.selectedZone);
   });
+  document.getElementById('btn-export').addEventListener('click', exportZoneCSV);
   document.getElementById('modal-close').addEventListener('click', hideStockModal);
   document.getElementById('stock-modal').addEventListener('click', e => {
     if (e.target === e.currentTarget) hideStockModal();
