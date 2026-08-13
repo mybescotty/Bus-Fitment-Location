@@ -148,6 +148,7 @@
         <input type="file" id="input-stock" accept=".csv">
       </div>
       <button id="btn-load" class="btn-primary">Load</button>
+      <button id="btn-share" class="btn-primary hidden" style="background:var(--fb-navy)">&#8595; Save Shareable Copy</button>
     </div>
   </section>
 
@@ -404,6 +405,7 @@ const AppState = {
   stockRows: [], stockCols: {}, stockIndex: new Map(),
   models: [], selectedModel: null, selectedFleet: null, selectedZone: null,
   aggregated: new Map(), fleetAggregated: new Map(), modelFleets: new Map(), sortAsc: false,
+  embeddedMeta: null,   // populated when viewer is loaded from EMBEDDED_DATA
 };
 
 function parseCSV(file) {
@@ -485,6 +487,7 @@ async function handleLoad() {
     if (stockFile) msg += ' Stock file: ' + AppState.stockRows.length.toLocaleString() + ' records.';
     if (!AppState.txCols.group) msg += ' Note: no material group column found — all parts will appear in General zone.';
     showStatus(!AppState.txCols.group ? 'warn' : 'ok', msg);
+    document.getElementById('btn-share').classList.remove('hidden');
     showSection('model-section');
     hideSection('diagram-section');
   } catch(e) {
@@ -744,6 +747,34 @@ function exportZoneCSV() {
   URL.revokeObjectURL(url);
 }
 
+function generateShareableHTML() {
+  if (!AppState.models.length) return;
+  const ser1 = m => [...m.entries()];
+  const ser2 = m => [...m.entries()].map(([k, v]) => [k, [...v.entries()]]);
+  const payload = {
+    models:          AppState.models,
+    aggregated:      ser2(AppState.aggregated),
+    fleetAggregated: ser2(AppState.fleetAggregated),
+    modelFleets:     ser1(AppState.modelFleets),
+    stockIndex:      ser1(AppState.stockIndex),
+    hasStock:        AppState.stockIndex.size > 0,
+    txCount:         AppState.embeddedMeta?.txCount    ?? AppState.txRows.length,
+    fleetCount:      AppState.embeddedMeta?.fleetCount ?? AppState.fleetRows.length,
+    generatedAt:     AppState.embeddedMeta?.generatedAt ?? new Date().toISOString(),
+  };
+  // Replace < with Unicode escape so </script> in data cannot close the injected block early
+  const json   = JSON.stringify(payload).replace(/</g, '\\u003c');
+  const inject = '<script>window.EMBEDDED_DATA = ' + json + ';<\/script>';
+  let html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  html = html.replace('</head>', inject + '</head>');
+  const date = new Date().toISOString().slice(0, 10);
+  const blob = new Blob([html], { type: 'text/html' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'bus-fitment-' + date + '.html'; a.click();
+  URL.revokeObjectURL(url);
+}
+
 function showStockModal(partNo, partDesc) {
   document.getElementById('modal-part-no').textContent = partNo;
   document.getElementById('modal-part-desc').textContent = partDesc;
@@ -809,6 +840,23 @@ function setLoadingState(on) {
 
 /* === §8 INIT === */
 document.addEventListener('DOMContentLoaded', () => {
+  // Viewer mode — data was baked in by generateShareableHTML()
+  if (window.EMBEDDED_DATA) {
+    const d = window.EMBEDDED_DATA;
+    AppState.models          = d.models;
+    AppState.aggregated      = new Map(d.aggregated.map(([k, v]) => [k, new Map(v)]));
+    AppState.fleetAggregated = new Map(d.fleetAggregated.map(([k, v]) => [k, new Map(v)]));
+    AppState.modelFleets     = new Map(d.modelFleets);
+    AppState.stockIndex      = new Map(d.stockIndex);
+    AppState.stockRows       = d.hasStock ? [{}] : []; // sentinel — keeps showStockModal logic correct
+    AppState.embeddedMeta    = { txCount: d.txCount, fleetCount: d.fleetCount, generatedAt: d.generatedAt };
+    hideSection('upload-section');
+    showSection('model-section');
+    populateModelDropdown();
+    const date = new Date(d.generatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    showStatus('ok', 'Embedded dataset — ' + d.txCount.toLocaleString() + ' transactions · ' + AppState.models.length + ' bus models. Generated ' + date + '.');
+  }
+
   wireZoneInteractions();
   document.getElementById('btn-load').addEventListener('click', handleLoad);
   document.getElementById('model-select').addEventListener('change', handleModelChange);
@@ -823,6 +871,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (AppState.selectedZone) renderPartsPanel(AppState.selectedZone);
   });
   document.getElementById('btn-export').addEventListener('click', exportZoneCSV);
+  document.getElementById('btn-share').addEventListener('click', generateShareableHTML);
   document.getElementById('modal-close').addEventListener('click', hideStockModal);
   document.getElementById('stock-modal').addEventListener('click', e => {
     if (e.target === e.currentTarget) hideStockModal();
