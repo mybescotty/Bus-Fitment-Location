@@ -404,7 +404,7 @@ const AppState = {
   fleetRows: [], txRows: [], fleetCols: {}, txCols: {},
   stockRows: [], stockCols: {}, stockIndex: new Map(),
   models: [], selectedModel: null, selectedFleet: null, selectedZone: null,
-  aggregated: new Map(), fleetAggregated: new Map(), modelFleets: new Map(), sortAsc: false,
+  aggregated: new Map(), fleetIndex: new Map(), modelFleets: new Map(), sortAsc: false,
   embeddedMeta: null,   // populated when viewer is loaded from EMBEDDED_DATA
 };
 
@@ -542,8 +542,8 @@ function finalise(acc) {
 function buildAggregatedData() {
   const idx = buildFleetIndex();
   const accModel = new Map();
-  const accFleet = new Map();
   const mf       = new Map(); // model → Set<fleetNo>
+  AppState.fleetIndex = new Map();
   const { fleetNo: fc, material: mc, desc: dc, group: gc, qty: qc } = AppState.txCols;
   for (const row of AppState.txRows) {
     const qty = parseFloat(String(row[qc] ?? '').replace(/,/g, ''));
@@ -556,13 +556,16 @@ function buildAggregatedData() {
     const group    = gc ? String(row[gc] ?? '').trim() : '';
     const zoneId   = classifyZone(group);
     const mk = model.toLowerCase();
-    accumulate(accModel, mk,  zoneId, material, desc, group, qty);
-    accumulate(accFleet, fn,  zoneId, material, desc, group, qty);
+    accumulate(accModel, mk, zoneId, material, desc, group, qty);
+    // compact fleet index — only part key → count (desc/group come from model data at render time)
+    if (!AppState.fleetIndex.has(fn)) AppState.fleetIndex.set(fn, new Map());
+    const fleetMap = AppState.fleetIndex.get(fn);
+    const matKey = material.toLowerCase();
+    fleetMap.set(matKey, (fleetMap.get(matKey) ?? 0) + qty);
     if (!mf.has(mk)) mf.set(mk, new Set());
     mf.get(mk).add(fn);
   }
-  AppState.aggregated     = finalise(accModel);
-  AppState.fleetAggregated = finalise(accFleet);
+  AppState.aggregated = finalise(accModel);
   AppState.modelFleets    = new Map(
     Array.from(mf.entries()).map(([mk, set]) => [
       mk, Array.from(set).sort((a, b) => parseInt(a) - parseInt(b) || a.localeCompare(b))
@@ -629,7 +632,13 @@ function handleFleetChange(evt) {
 
 function getZoneRows(zoneId) {
   if (AppState.selectedFleet) {
-    return AppState.fleetAggregated.get(AppState.selectedFleet)?.get(zoneId) ?? [];
+    const fleetMap  = AppState.fleetIndex.get(AppState.selectedFleet);
+    if (!fleetMap) return [];
+    const modelRows = AppState.aggregated.get(AppState.selectedModel?.toLowerCase())?.get(zoneId) ?? [];
+    return modelRows
+      .filter(r => fleetMap.has(r.material.toLowerCase()))
+      .map(r => ({ ...r, issues: fleetMap.get(r.material.toLowerCase()) }))
+      .sort((a, b) => b.issues - a.issues);
   }
   return AppState.aggregated.get(AppState.selectedModel?.toLowerCase())?.get(zoneId) ?? [];
 }
@@ -754,7 +763,7 @@ function generateShareableHTML() {
   const payload = {
     models:          AppState.models,
     aggregated:      ser2(AppState.aggregated),
-    fleetAggregated: ser2(AppState.fleetAggregated),
+    fleetIndex:      [...AppState.fleetIndex.entries()].map(([k, v]) => [k, [...v.entries()]]),
     modelFleets:     ser1(AppState.modelFleets),
     stockIndex:      ser1(AppState.stockIndex),
     hasStock:        AppState.stockIndex.size > 0,
@@ -845,7 +854,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const d = window.EMBEDDED_DATA;
     AppState.models          = d.models;
     AppState.aggregated      = new Map(d.aggregated.map(([k, v]) => [k, new Map(v)]));
-    AppState.fleetAggregated = new Map(d.fleetAggregated.map(([k, v]) => [k, new Map(v)]));
+    AppState.fleetIndex      = new Map(d.fleetIndex.map(([k, v]) => [k, new Map(v)]));
     AppState.modelFleets     = new Map(d.modelFleets);
     AppState.stockIndex      = new Map(d.stockIndex);
     AppState.stockRows       = d.hasStock ? [{}] : []; // sentinel — keeps showStockModal logic correct
