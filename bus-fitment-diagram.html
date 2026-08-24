@@ -762,7 +762,7 @@ function generateShareableHTML() {
     fleetCount:      AppState.embeddedMeta?.fleetCount ?? AppState.fleetRows.length,
     generatedAt:     AppState.embeddedMeta?.generatedAt ?? new Date().toISOString(),
   };
-  // Replace < with Unicode escape so </script> in data cannot close the injected block early
+  // Replace < with < so embedded JSON values cannot break the surrounding script block
   const json   = JSON.stringify(payload).replace(/</g, '\\u003c');
   const inject = '<script>window.EMBEDDED_DATA = ' + json + ';<\/script>';
   let html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
