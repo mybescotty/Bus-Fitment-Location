@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bus Parts Fitment Diagram — User Guide</title>
+  <style>
+    /* === DESIGN.md variables === */
+    :root {
+      --navy:       #2D2A6E;
+      --pink:       #E5007D;
+      --pink-hover: #C0006A;
+      --bg:         #f5f5f7;
+      --panel:      #ffffff;
+      --border:     #e0e0ec;
+      --text:       #2D2A6E;
+      --muted:      #6b6b8a;
+      --white:      #ffffff;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; }
+
+    /* === HEADER === */
+    header {
+      background: var(--navy);
+      color: var(--white);
+      padding: 0 32px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header-accent { width: 4px; height: 36px; background: var(--pink); border-radius: 2px; flex-shrink: 0; }
+    .header-title { font-size: 18px; font-weight: 700; }
+    .header-sub { font-size: 10px; opacity: 0.55; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 2px; }
+
+    /* === PAGE LAYOUT === */
+    .page { max-width: 820px; margin: 32px auto; padding: 0 24px 60px; }
+
+    /* === INTRO CARD === */
+    .intro-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--pink);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 28px;
+    }
+    .intro-card h2 { font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
+    .intro-card p { color: #444; font-size: 13px; line-height: 1.7; }
+
+    /* === STEPS === */
+    .step {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      page-break-inside: avoid;
+    }
+    .step-header { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+    .step-num {
+      background: var(--pink);
+      color: var(--white);
+      font-size: 13px;
+      font-weight: 800;
+      min-width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-title { font-size: 15px; font-weight: 700; color: var(--navy); }
+
+    .step p, .step li { font-size: 13px; color: #333; line-height: 1.75; }
+    .step ul, .step ol { padding-left: 20px; margin: 8px 0; }
+    .step li { margin-bottom: 4px; }
+
+    .tip {
+      background: #f0f0fa;
+      border-left: 3px solid var(--navy);
+      border-radius: 0 5px 5px 0;
+      padding: 8px 12px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .tip strong { color: var(--navy); }
+
+    /* === ZONE COLOUR KEY === */
+    .zone-key { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+    .zone-pill {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 12px; color: #333; font-weight: 500;
+    }
+    .zone-dot { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+
+    /* === QUICK REFERENCE TABLE === */
+    .ref-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    .ref-table th {
+      background: var(--navy);
+      color: var(--white);
+      padding: 8px 12px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .ref-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .ref-table tbody tr:nth-child(even) { background: #f8f8fc; }
+    .ref-table .action { font-weight: 600; color: var(--navy); white-space: nowrap; }
+    .key {
+      display: inline-block;
+      background: #e8e8f0;
+      border: 1px solid #c8c8d8;
+      border-radius: 3px;
+      padding: 1px 6px;
+      font-family: monospace;
+      font-size: 11px;
+      color: var(--navy);
+    }
+
+    /* === FOOTER === */
+    footer {
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      padding: 24px 0 0;
+      border-top: 1px solid var(--border);
+      margin-top: 32px;
+    }
+
+    /* === PRINT === */
+    @media print {
+      body { background: white; font-size: 12px; }
+      header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .step-num { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .ref-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .page { margin: 0; padding: 16px 24px 32px; max-width: 100%; }
+      .step { border: 1px solid #ccc; page-break-inside: avoid; }
+      .intro-card { border-left: 4px solid var(--pink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-accent"></div>
+  <div>
+    <div class="header-title">🚌 Bus Parts Fitment Diagram — User Guide</div>
+    <div class="header-sub">Designed by First Bus Franchise · Engineering</div>
+  </div>
+</header>
+
+<div class="page">
+
+  <!-- INTRO -->
+  <div class="intro-card">
+    <h2>About this tool</h2>
+    <p>
+      The Bus Parts Fitment Diagram lets you explore which parts have been issued to your fleet,
+      organised by zone on a visual bus diagram. The data is pre-loaded — just open the file in
+      any browser. No login, no installation, and no internet connection required.
+    </p>
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">1</div>
+      <div class="step-title">Choose your view — Bus Model and Fleet Number</div>
+    </div>
+    <p>At the top of the page you will see two dropdowns:</p>
+    <ul>
+      <li><strong>Bus Model</strong> — select a bus type (e.g. <em>Volvo B8RLE</em>). This shows combined parts data across every bus of that model.</li>
+      <li><strong>Fleet Number</strong> — once a model is selected, this dropdown lists every individual bus of that type. Pick a fleet number to narrow the view to that one bus only.</li>
+    </ul>
+    <p style="margin-top:10px;">The zone badges on the diagram update automatically whenever you change either dropdown.</p>
+    <div class="tip"><strong>Tip:</strong> Start with a model to see the full picture, then drill into a fleet number to investigate a specific bus.</div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">2</div>
+      <div class="step-title">Explore the zone diagram</div>
+    </div>
+    <p>The bus diagram is divided into colour-coded zones. Each zone represents a group of related parts:</p>
+    <div class="zone-key">
+      <div class="zone-pill"><div class="zone-dot" style="background:#B41E2A"></div> Engine &amp; Drivetrain</div>
+      <div class="zone-pill"><div class="zone-dot" style="background:#1A7FC1"></div> Cooling System</div>
+      <div class="zone-pill"><div class="zone-dot" style="background:#2E6B9E"></div> Brakes, Wheels &amp; Suspension</div>
+      <div class="zone-pill"><div class="zone-dot" style="background:#C07800"></div> Doors &amp; Body</div>
+      <div class="zone-pill"><div class="zone-dot" style="background:#007A6E"></div> Electrical, HVAC &amp; Interior</div>
+      <div class="zone-pill"><div class="zone-dot" style="background:#606878"></div> General / Unclassified</div>
+    </div>
+    <ul>
+      <li><strong>Hover</strong> over a zone to highlight it.</li>
+      <li><strong>Click</strong> a zone to select it — the parts list panel will appear on the right.</li>
+      <li>Each zone badge shows two numbers: the count of distinct parts and the total number of issues.</li>
+      <li>The <strong>General / Unclassified</strong> button below the diagram covers parts that did not match any specific zone keyword — click it the same way.</li>
+    </ul>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">3</div>
+      <div class="step-title">Browse the parts list</div>
+    </div>
+    <p>After clicking a zone, the parts panel on the right shows every part issued in that zone for your selected model or fleet number.</p>
+    <ul>
+      <li><strong>Part No.</strong> — the material or part number</li>
+      <li><strong>Description</strong> — the part name from the transaction data</li>
+      <li><strong>Group</strong> — the material group category</li>
+      <li><strong>Issues</strong> — the total quantity issued over the data period</li>
+    </ul>
+    <p style="margin-top:10px;"><strong>Sorting:</strong> Click the <em>Issues</em> column header to toggle between highest-first and lowest-first.</p>
+    <p style="margin-top:6px;"><strong>Searching:</strong> Type in the search box above the table to filter by part number or description — results update as you type. Clear the box to show all parts again.</p>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">4</div>
+      <div class="step-title">Check stock locations</div>
+    </div>
+    <p>Click any row in the parts list to open the <strong>Stock Location</strong> panel for that part.</p>
+    <ul>
+      <li>The panel shows every depot holding that part, with the <strong>Bin</strong> location and <strong>Quantity on hand</strong>.</li>
+      <li>If a part is stocked at multiple depots, each depot appears on its own row.</li>
+    </ul>
+    <p style="margin-top:10px;"><strong>Closing the panel:</strong> click the <strong>×</strong> button in the top-right corner, click anywhere outside the panel, or press <span class="key">Esc</span>.</p>
+    <div class="tip"><strong>Note:</strong> If the stock panel says "No stock records found", the part exists in the transaction data but was not found in the stock file. Contact stores to confirm current bin location.</div>
+  </div>
+
+  <!-- STEP 5 -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">5</div>
+      <div class="step-title">Export a parts list</div>
+    </div>
+    <p>When a zone is selected and has data, an <strong>Export CSV</strong> button appears in the top-right corner of the parts panel.</p>
+    <ul>
+      <li>Click it to download the current list as a spreadsheet-compatible CSV file.</li>
+      <li>The export includes exactly the rows shown on screen — if you have typed a search term, only the matching rows are exported.</li>
+      <li>The filename includes the model or fleet number and the zone name, e.g. <em>fitment-Volvo-B8RLE-brakes.csv</em>.</li>
+    </ul>
+    <div class="tip"><strong>Tip:</strong> To export all parts for a zone, clear the search box first, then click Export CSV.</div>
+  </div>
+
+  <!-- QUICK REFERENCE -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num" style="background:var(--navy)">⚡</div>
+      <div class="step-title">Quick reference</div>
+    </div>
+    <table class="ref-table">
+      <thead>
+        <tr><th>Action</th><th>How to do it</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="action">Select a bus model</td><td>Bus Model dropdown at the top of the page</td></tr>
+        <tr><td class="action">View a single bus</td><td>Fleet Number dropdown (select a model first)</td></tr>
+        <tr><td class="action">Select a zone</td><td>Click a coloured zone on the bus diagram</td></tr>
+        <tr><td class="action">View unclassified parts</td><td>Click the General / Unclassified button below the diagram</td></tr>
+        <tr><td class="action">Search parts</td><td>Type in the search box above the parts table</td></tr>
+        <tr><td class="action">Sort by issues</td><td>Click the Issues column header — toggles high/low</td></tr>
+        <tr><td class="action">View stock location</td><td>Click any row in the parts table</td></tr>
+        <tr><td class="action">Close stock panel</td><td>Click × or press <span class="key">Esc</span> or click outside the panel</td></tr>
+        <tr><td class="action">Export parts list</td><td>Click Export CSV (top-right of parts panel)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    Bus Parts Fitment Diagram · First Bus Franchise Engineering ·
+    Internal use only
+  </footer>
+
+</div>
+</body>
+</html>
