@@ -74,7 +74,11 @@
                display: flex; align-items: center; justify-content: center;
                font-size: 11px; font-weight: 700; color: var(--navy); cursor: grab; }
     .el-rack:hover { border-color: var(--navy); }
-    .el-rack.selected { border-color: var(--sel); box-shadow: 0 0 0 2px rgba(26,127,193,0.3); }
+    .el-rack.selected { border-color: var(--sel); box-shadow: 0 0 0 2px rgba(26,127,193,0.3); overflow: visible; }
+    .resize-handle { position: absolute; width: 9px; height: 9px; background: white; border: 2px solid var(--sel); border-radius: 2px; z-index: 10; }
+    .rh-e  { right: -5px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+    .rh-s  { bottom: -5px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+    .rh-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
     .el-wall { background: var(--wall-bg); border-radius: 2px; cursor: move; }
     .el-wall:hover { opacity: 0.75; }
     .el-wall.selected { outline: 3px solid var(--sel); outline-offset: 2px; box-shadow: 0 0 0 5px rgba(26,127,193,0.25); }
@@ -174,6 +178,7 @@
 <div id="help-bar">
   <strong>Select:</strong> click any element &nbsp;|&nbsp;
   <strong>Move:</strong> drag &nbsp;|&nbsp;
+  <strong>Resize rack:</strong> select then drag the edge or corner handles &nbsp;|&nbsp;
   <strong>Rotate rack:</strong> double-click or press R when selected &nbsp;|&nbsp;
   <strong>Delete (racks, walls, labels):</strong> click to select (blue outline), then Delete key or toolbar button &nbsp;|&nbsp;
   <strong>Wall:</strong> activate Wall tool, then click-drag on canvas &nbsp;|&nbsp;
@@ -357,6 +362,15 @@ function wireEl(dom, elData) {
 }
 
 document.addEventListener('mousemove', e => {
+  if (AppState.resizing) {
+    const r = AppState.resizing;
+    const dx = e.clientX - r.startX, dy = e.clientY - r.startY;
+    if (r.dirs.includes('e')) r.elData.w = Math.max(30, snap(r.origW + dx));
+    if (r.dirs.includes('s')) r.elData.h = Math.max(20, snap(r.origH + dy));
+    r.dom.style.width  = r.elData.w + 'px';
+    r.dom.style.height = r.elData.h + 'px';
+    return;
+  }
   if (AppState.dragging) {
     const d = AppState.dragging;
     d.elData.x = snap(Math.max(0, d.origX + e.clientX - d.startX));
@@ -381,6 +395,7 @@ document.addEventListener('mousemove', e => {
 });
 
 document.addEventListener('mouseup', e => {
+  if (AppState.resizing) { AppState.resizing = null; return; }
   if (AppState.dragging) { AppState.dragging = null; return; }
   if (AppState.wallDraw) {
     const wd = AppState.wallDraw;
@@ -431,7 +446,39 @@ function rotateRack(elData, dom) {
   elData.h = tmp;
   dom.style.width  = elData.w + 'px';
   dom.style.height = elData.h + 'px';
+  if (dom.classList.contains('selected')) { removeResizeHandles(dom); addResizeHandles(dom); }
   showStatus('Rack ' + elData.id + ' rotated.', false);
+}
+
+/* ===== RESIZE ===== */
+// resizing: { dom, elData, dirs, startX, startY, origW, origH }
+AppState.resizing = null;
+
+function addResizeHandles(dom) {
+  removeResizeHandles(dom);
+  for (const dirs of ['e', 's', 'se']) {
+    const h = document.createElement('div');
+    h.className = 'resize-handle rh-' + dirs;
+    h.dataset.dirs = dirs;
+    h.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      AppState.resizing = {
+        dom,
+        elData: AppState.selected.elData,
+        dirs,
+        startX: e.clientX,
+        startY: e.clientY,
+        origW: AppState.selected.elData.w,
+        origH: AppState.selected.elData.h,
+      };
+    });
+    dom.appendChild(h);
+  }
+}
+
+function removeResizeHandles(dom) {
+  dom.querySelectorAll('.resize-handle').forEach(h => h.remove());
 }
 
 /* ===== SELECTION ===== */
@@ -439,11 +486,15 @@ function selectElement(elData, dom) {
   clearSelection();
   AppState.selected = { elData, dom };
   dom.classList.add('selected');
+  if (elData.type === 'rack') addResizeHandles(dom);
 }
 
 function clearSelection() {
-  AppState.selected?.dom.classList.remove('selected');
-  AppState.selected = null;
+  if (AppState.selected) {
+    AppState.selected.dom.classList.remove('selected');
+    removeResizeHandles(AppState.selected.dom);
+    AppState.selected = null;
+  }
 }
 
 /* ===== DEPOT MANAGEMENT ===== */
