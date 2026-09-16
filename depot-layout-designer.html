@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Depot Layout Designer — First Bus</title>
+  <style>
+    :root {
+      --navy:    #2D2A6E;
+      --magenta: #E5007D;
+      --rack-bg: #F0F0F8;
+      --wall-bg: #1A1840;
+      --aisle:   #D8D8E0;
+      --sel:     #1A7FC1;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #F4F5F7; color: #222; font-size: 14px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* HEADER */
+    #app-header { background: var(--navy); color: white; flex-shrink: 0; }
+    .header-inner { display: flex; align-items: stretch; padding: 0; }
+    .brand-bar { width: 5px; background: var(--magenta); flex-shrink: 0; }
+    .header-text { padding: 10px 18px; }
+    .header-sup { display: block; font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.08em; }
+    .header-title { font-size: 18px; font-weight: 700; }
+
+    /* DEPOT TABS */
+    #depot-bar { background: white; border-bottom: 2px solid var(--navy); display: flex; align-items: center; flex-shrink: 0; overflow-x: auto; padding: 0 12px; gap: 4px; height: 42px; }
+    .depot-tab { background: none; border: none; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; color: #666; white-space: nowrap; transition: color 0.15s; margin-bottom: -2px; }
+    .depot-tab:hover { color: var(--navy); }
+    .depot-tab.active { color: var(--navy); border-bottom-color: var(--magenta); }
+    #btn-add-depot { background: var(--magenta); color: white; border: none; padding: 5px 12px; border-radius: 4px; font-size: 12px; font-weight: 700; cursor: pointer; margin-left: 8px; white-space: nowrap; flex-shrink: 0; }
+    #btn-add-depot:hover { background: #c0006a; }
+    #no-depots-msg { color: #8C96A6; font-size: 13px; font-style: italic; padding: 0 8px; }
+
+    /* TOOLBAR */
+    #toolbar { background: white; border-bottom: 1px solid #e0e0ec; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 8px 14px; flex-wrap: wrap; }
+    .toolbar-group { display: flex; align-items: center; gap: 6px; }
+    .toolbar-sep { width: 1px; height: 28px; background: #e0e0ec; }
+    .tb-label { font-size: 11px; font-weight: 700; color: #8C96A6; text-transform: uppercase; letter-spacing: 0.06em; }
+    .btn-tool { padding: 6px 14px; border-radius: 4px; border: 1px solid #e0e0ec; background: white; font-size: 13px; font-weight: 600; cursor: pointer; color: #444; transition: background 0.12s, color 0.12s, border-color 0.12s; }
+    .btn-tool:hover { background: #f0f0f8; border-color: var(--navy); color: var(--navy); }
+    .btn-tool.active { background: var(--navy); color: white; border-color: var(--navy); }
+    .btn-tool.danger { border-color: #e00; color: #c00; }
+    .btn-tool.danger:hover { background: #c00; color: white; border-color: #c00; }
+    #rack-id-input { padding: 6px 10px; border: 1px solid #e0e0ec; border-radius: 4px; font-size: 13px; font-weight: 600; width: 80px; text-transform: uppercase; outline: none; }
+    #rack-id-input:focus { border-color: var(--navy); box-shadow: 0 0 0 2px rgba(45,42,110,0.15); }
+    #label-text-input { padding: 6px 10px; border: 1px solid #e0e0ec; border-radius: 4px; font-size: 13px; width: 130px; outline: none; }
+    #label-text-input:focus { border-color: var(--navy); box-shadow: 0 0 0 2px rgba(45,42,110,0.15); }
+    #btn-import-csv { position: relative; overflow: hidden; }
+    #import-csv-file { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    #btn-import-json { position: relative; overflow: hidden; }
+    #import-json-file { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    #toolbar-status { font-size: 12px; color: #1E6A35; font-style: italic; }
+
+    /* CANVAS AREA */
+    #canvas-area { flex: 1; overflow: hidden; position: relative; background: #E8E9EE; }
+    #canvas-scroll { width: 100%; height: 100%; overflow: auto; }
+    #canvas { position: relative; width: 1200px; height: 700px; background: white;
+      background-image: radial-gradient(circle, #c0c0cc 1px, transparent 1px);
+      background-size: 10px 10px; user-select: none; cursor: default; }
+    #canvas.tool-wall { cursor: crosshair; }
+    #canvas.tool-label { cursor: text; }
+
+    /* ELEMENTS ON CANVAS */
+    .el { position: absolute; }
+    .el-rack { background: var(--rack-bg); border: 2px solid #9090B8; border-radius: 3px;
+               display: flex; align-items: center; justify-content: center;
+               font-size: 11px; font-weight: 700; color: var(--navy); cursor: grab;
+               transition: border-color 0.1s; }
+    .el-rack:hover { border-color: var(--navy); }
+    .el-rack.selected { border: 2px solid var(--sel); box-shadow: 0 0 0 2px rgba(26,127,193,0.3); }
+    .el-wall { background: var(--wall-bg); border-radius: 2px; cursor: move; }
+    .el-wall.selected { outline: 2px solid var(--sel); outline-offset: 2px; }
+    .el-label { font-size: 12px; font-weight: 700; color: var(--navy); white-space: nowrap;
+                cursor: move; padding: 2px 4px; border-radius: 2px; background: transparent; }
+    .el-label:hover { background: rgba(45,42,110,0.08); }
+    .el-label.selected { outline: 2px solid var(--sel); outline-offset: 2px; background: rgba(45,42,110,0.06); }
+    #wall-preview { position: absolute; background: var(--wall-bg); opacity: 0.5; pointer-events: none; border-radius: 2px; display: none; }
+
+    /* IMPORT MODAL */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal-overlay.hidden { display: none; }
+    .modal-card { background: white; border-radius: 10px; width: 100%; max-width: 460px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.25); }
+    .modal-head { background: var(--navy); color: white; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid var(--magenta); }
+    .modal-head h3 { font-size: 15px; font-weight: 700; }
+    .modal-close-btn { background: none; border: none; color: white; font-size: 22px; cursor: pointer; opacity: 0.8; }
+    .modal-close-btn:hover { opacity: 1; }
+    .modal-body { padding: 18px; }
+    .modal-body label { display: block; font-size: 12px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; margin-top: 14px; }
+    .modal-body label:first-child { margin-top: 0; }
+    .modal-body select, .modal-body input[type="text"] { width: 100%; padding: 8px 10px; border: 1px solid #e0e0ec; border-radius: 5px; font-size: 14px; outline: none; }
+    .modal-body select:focus, .modal-body input[type="text"]:focus { border-color: var(--navy); }
+    .modal-body p { font-size: 13px; color: #555; margin-top: 8px; line-height: 1.5; }
+    .modal-body .hint { font-size: 12px; color: #8C96A6; margin-top: 4px; }
+    .modal-footer { padding: 12px 18px; background: #F8F9FB; border-top: 1px solid #e0e0ec; display: flex; justify-content: flex-end; gap: 10px; }
+    .btn-primary { background: var(--magenta); color: white; border: none; padding: 9px 22px; border-radius: 5px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn-primary:hover { background: #c0006a; }
+    .btn-secondary { background: white; color: var(--navy); border: 1px solid var(--navy); padding: 9px 22px; border-radius: 5px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn-secondary:hover { background: var(--navy); color: white; }
+    .error-msg { color: #c00; font-size: 13px; margin-top: 8px; }
+
+    /* HELP PANEL */
+    #help-bar { background: #EEF0F8; border-top: 1px solid #e0e0ec; padding: 5px 14px; font-size: 11px; color: #666; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+
+<header id="app-header">
+  <div class="header-inner">
+    <div class="brand-bar"></div>
+    <div class="header-text">
+      <span class="header-sup">First Bus — Stores</span>
+      <span class="header-title">Depot Layout Designer</span>
+    </div>
+  </div>
+</header>
+
+<div id="depot-bar">
+  <span id="no-depots-msg">No depots yet — import a stock CSV or add a depot manually</span>
+  <button id="btn-add-depot">+ Add Depot</button>
+</div>
+
+<div id="toolbar">
+  <div class="toolbar-group">
+    <span class="tb-label">Import</span>
+    <button class="btn-tool" id="btn-import-csv">
+      From Stock CSV
+      <input type="file" id="import-csv-file" accept=".csv">
+    </button>
+    <button class="btn-tool" id="btn-import-json">
+      Load Saved JSON
+      <input type="file" id="import-json-file" accept=".json">
+    </button>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div class="toolbar-group">
+    <span class="tb-label">Add</span>
+    <input type="text" id="rack-id-input" placeholder="e.g. 04A" title="Rack ID (row+letter)">
+    <button class="btn-tool" id="btn-add-rack">+ Rack</button>
+    <button class="btn-tool" id="btn-tool-wall" data-tool="wall">&#9646; Wall</button>
+    <input type="text" id="label-text-input" placeholder="Label text…">
+    <button class="btn-tool" id="btn-add-label">+ Label</button>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div class="toolbar-group">
+    <button class="btn-tool danger" id="btn-delete-sel">&#128465; Delete Selected</button>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div class="toolbar-group">
+    <button class="btn-tool" id="btn-export-json">&#8595; Export JSON</button>
+  </div>
+  <span id="toolbar-status"></span>
+</div>
+
+<div id="canvas-area">
+  <div id="canvas-scroll">
+    <div id="canvas">
+      <div id="wall-preview"></div>
+    </div>
+  </div>
+</div>
+
+<div id="help-bar">
+  <strong>Select:</strong> click an element &nbsp;|&nbsp;
+  <strong>Move:</strong> drag &nbsp;|&nbsp;
+  <strong>Wall:</strong> activate Wall tool then click-drag on canvas &nbsp;|&nbsp;
+  <strong>Delete:</strong> select then press Delete key or toolbar button &nbsp;|&nbsp;
+  <strong>Rename depot:</strong> double-click its tab
+</div>
+
+<!-- CSV IMPORT MODAL -->
+<div id="csv-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>Import from Stock CSV</h3>
+      <button class="modal-close-btn" id="csv-modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p id="csv-modal-info">Reading file…</p>
+      <label id="lbl-depot-select" class="hidden">Choose depot to import</label>
+      <select id="csv-depot-select" class="hidden"></select>
+      <p class="hint hidden" id="csv-depot-hint"></p>
+      <p class="error-msg hidden" id="csv-error"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="csv-modal-cancel">Cancel</button>
+      <button class="btn-primary hidden" id="csv-modal-import">Import Depot</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD DEPOT MODAL -->
+<div id="add-depot-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>Add New Depot</h3>
+      <button class="modal-close-btn" id="add-depot-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <label>Depot Name</label>
+      <input type="text" id="new-depot-name" placeholder="e.g. Manchester Central">
+      <p class="error-msg hidden" id="add-depot-error"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="add-depot-cancel">Cancel</button>
+      <button class="btn-primary" id="add-depot-confirm">Add</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+/* ===== COLUMN DETECTION (matches bus-fitment-diagram.html) ===== */
+const COL_STOCK_DEPOT = ['depotdesc','depot desc','depot','store','location','plant'];
+const COL_STOCK_BIN   = ['bin','bin location','bin no','bin number','bin loc'];
+
+function normaliseHeader(s) { return String(s).toLowerCase().trim().replace(/\s+/g,' '); }
+
+function detectColumn(headers, candidates) {
+  const norm = headers.map(h => ({ raw: h, n: normaliseHeader(h) }));
+  for (const c of candidates) {
+    const nc = normaliseHeader(c);
+    const hit = norm.find(h => h.n === nc);
+    if (hit) return hit.raw;
+  }
+  for (const c of candidates) {
+    const nc = normaliseHeader(c);
+    const hit = norm.find(h => h.n.includes(nc));
+    if (hit) return hit.raw;
+  }
+  return null;
+}
+
+/* ===== BIN CODE PARSING ===== */
+function parseRackId(bin) {
+  return String(bin).trim().slice(0, 3).toUpperCase();
+}
+function parseRow(bin) {
+  return String(bin).trim().slice(0, 2).toUpperCase();
+}
+
+/* ===== APP STATE ===== */
+const AppState = {
+  depots: {},       // { [name]: { elements: [] } }
+  activeDepot: null,
+  activeTool: 'select',  // 'select' | 'wall'
+  selected: null,   // reference to element object currently selected
+  dragging: null,   // { el (DOM), elData (obj), startX, startY, origX, origY }
+  wallDraw: null,   // { startX, startY, preview (DOM) }
+  csvParsed: null,  // { depots: { name: [rackIds] }, depotCol, binCol }
+};
+
+/* ===== CANVAS / SNAP ===== */
+const CANVAS = document.getElementById('canvas');
+const SNAP = 10;
+
+function snap(v) { return Math.round(v / SNAP) * SNAP; }
+
+/* ===== ELEMENT CREATION ===== */
+function makeRackDom(elData) {
+  const div = document.createElement('div');
+  div.className = 'el el-rack';
+  div.style.left = elData.x + 'px';
+  div.style.top  = elData.y + 'px';
+  div.style.width  = elData.w + 'px';
+  div.style.height = elData.h + 'px';
+  div.textContent = elData.id;
+  div.dataset.elId = elData._id;
+  wireElementEvents(div, elData);
+  return div;
+}
+
+function makeWallDom(elData) {
+  const div = document.createElement('div');
+  div.className = 'el el-wall';
+  div.style.left   = elData.x + 'px';
+  div.style.top    = elData.y + 'px';
+  div.style.width  = elData.w + 'px';
+  div.style.height = elData.h + 'px';
+  div.dataset.elId = elData._id;
+  wireElementEvents(div, elData);
+  return div;
+}
+
+function makeLabelDom(elData) {
+  const div = document.createElement('div');
+  div.className = 'el el-label';
+  div.style.left = elData.x + 'px';
+  div.style.top  = elData.y + 'px';
+  div.textContent = elData.text;
+  div.dataset.elId = elData._id;
+  wireElementEvents(div, elData);
+  return div;
+}
+
+let _nextId = 1;
+function uid() { return String(_nextId++); }
+
+function addElement(elData) {
+  if (!AppState.activeDepot) return;
+  elData._id = uid();
+  AppState.depots[AppState.activeDepot].elements.push(elData);
+  const dom = renderElement(elData);
+  CANVAS.appendChild(dom);
+  return elData;
+}
+
+function renderElement(elData) {
+  if (elData.type === 'rack')  return makeRackDom(elData);
+  if (elData.type === 'wall')  return makeWallDom(elData);
+  if (elData.type === 'label') return makeLabelDom(elData);
+}
+
+/* ===== DRAG ===== */
+function wireElementEvents(dom, elData) {
+  dom.addEventListener('mousedown', e => {
+    if (AppState.activeTool !== 'select') return;
+    e.stopPropagation();
+    selectElement(elData, dom);
+    const rect = CANVAS.getBoundingClientRect();
+    const scroll = { x: CANVAS.parentElement.scrollLeft, y: CANVAS.parentElement.scrollTop };
+    AppState.dragging = {
+      dom, elData,
+      startX: e.clientX, startY: e.clientY,
+      origX: elData.x, origY: elData.y,
+      scrollX: scroll.x, scrollY: scroll.y,
+    };
+    e.preventDefault();
+  });
+}
+
+document.addEventListener('mousemove', e => {
+  if (AppState.dragging) {
+    const d = AppState.dragging;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    const newX = snap(Math.max(0, d.origX + dx));
+    const newY = snap(Math.max(0, d.origY + dy));
+    d.elData.x = newX;
+    d.elData.y = newY;
+    d.dom.style.left = newX + 'px';
+    d.dom.style.top  = newY + 'px';
+    return;
+  }
+  if (AppState.wallDraw) {
+    const wd = AppState.wallDraw;
+    const rect = CANVAS.getBoundingClientRect();
+    const scroll = { x: CANVAS.parentElement.scrollLeft, y: CANVAS.parentElement.scrollTop };
+    const curX = snap(e.clientX - rect.left + scroll.x);
+    const curY = snap(e.clientY - rect.top  + scroll.y);
+    const x = Math.min(wd.startX, curX);
+    const y = Math.min(wd.startY, curY);
+    const w = Math.max(10, Math.abs(curX - wd.startX));
+    const h = Math.max(10, Math.abs(curY - wd.startY));
+    const preview = document.getElementById('wall-preview');
+    preview.style.display = 'block';
+    preview.style.left = x + 'px'; preview.style.top  = y + 'px';
+    preview.style.width = w + 'px'; preview.style.height = h + 'px';
+  }
+});
+
+document.addEventListener('mouseup', e => {
+  if (AppState.dragging) { AppState.dragging = null; return; }
+  if (AppState.wallDraw) {
+    const wd = AppState.wallDraw;
+    const rect = CANVAS.getBoundingClientRect();
+    const scroll = { x: CANVAS.parentElement.scrollLeft, y: CANVAS.parentElement.scrollTop };
+    const curX = snap(e.clientX - rect.left + scroll.x);
+    const curY = snap(e.clientY - rect.top  + scroll.y);
+    const x = Math.min(wd.startX, curX);
+    const y = Math.min(wd.startY, curY);
+    const w = Math.max(10, Math.abs(curX - wd.startX));
+    const h = Math.max(10, Math.abs(curY - wd.startY));
+    document.getElementById('wall-preview').style.display = 'none';
+    AppState.wallDraw = null;
+    if (w > 10 || h > 10) {
+      addElement({ type: 'wall', x, y, w, h });
+    }
+  }
+});
+
+/* ===== SELECTION ===== */
+function selectElement(elData, dom) {
+  clearSelection();
+  AppState.selected = { elData, dom };
+  dom.classList.add('selected');
+}
+
+function clearSelection() {
+  if (AppState.selected) {
+    AppState.selected.dom.classList.remove('selected');
+    AppState.selected = null;
+  }
+}
+
+CANVAS.addEventListener('mousedown', e => {
+  if (e.target === CANVAS || e.target === document.getElementById('wall-preview')) {
+    if (AppState.activeTool === 'wall') {
+      const rect = CANVAS.getBoundingClientRect();
+      const scroll = { x: CANVAS.parentElement.scrollLeft, y: CANVAS.parentElement.scrollTop };
+      const startX = snap(e.clientX - rect.left + scroll.x);
+      const startY = snap(e.clientY - rect.top  + scroll.y);
+      AppState.wallDraw = { startX, startY };
+      e.preventDefault();
+    } else {
+      clearSelection();
+    }
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if ((e.key === 'Delete' || e.key === 'Backspace') && AppState.selected) {
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
+    deleteSelected();
+  }
+});
+
+/* ===== DEPOT MANAGEMENT ===== */
+function renderDepotTabs() {
+  const bar = document.getElementById('depot-bar');
+  bar.innerHTML = '';
+  const names = Object.keys(AppState.depots);
+
+  const noMsg = document.getElementById('no-depots-msg') || (() => {
+    const s = document.createElement('span');
+    s.id = 'no-depots-msg';
+    return s;
+  })();
+  noMsg.textContent = 'No depots yet — import a stock CSV or add a depot manually';
+  noMsg.style.display = names.length === 0 ? 'block' : 'none';
+  bar.appendChild(noMsg);
+
+  for (const name of names) {
+    const btn = document.createElement('button');
+    btn.className = 'depot-tab' + (name === AppState.activeDepot ? ' active' : '');
+    btn.textContent = name;
+    btn.addEventListener('click', () => setActiveDepot(name));
+    btn.addEventListener('dblclick', () => renameDepot(name));
+    bar.appendChild(btn);
+  }
+  const addBtn = document.createElement('button');
+  addBtn.id = 'btn-add-depot';
+  addBtn.textContent = '+ Add Depot';
+  addBtn.addEventListener('click', openAddDepotModal);
+  bar.appendChild(addBtn);
+}
+
+function setActiveDepot(name) {
+  AppState.activeDepot = name;
+  clearSelection();
+  renderDepotTabs();
+  renderCanvas();
+}
+
+function renameDepot(oldName) {
+  const newName = prompt('Rename depot:', oldName);
+  if (!newName || newName.trim() === '' || newName === oldName) return;
+  const trimmed = newName.trim();
+  if (AppState.depots[trimmed]) { alert('A depot with that name already exists.'); return; }
+  AppState.depots[trimmed] = AppState.depots[oldName];
+  delete AppState.depots[oldName];
+  if (AppState.activeDepot === oldName) AppState.activeDepot = trimmed;
+  renderDepotTabs();
+  renderCanvas();
+}
+
+function openAddDepotModal() {
+  document.getElementById('new-depot-name').value = '';
+  document.getElementById('add-depot-error').classList.add('hidden');
+  document.getElementById('add-depot-modal').classList.remove('hidden');
+  document.getElementById('new-depot-name').focus();
+}
+
+function closeAddDepotModal() {
+  document.getElementById('add-depot-modal').classList.add('hidden');
+}
+
+function confirmAddDepot() {
+  const name = document.getElementById('new-depot-name').value.trim();
+  const errEl = document.getElementById('add-depot-error');
+  if (!name) { errEl.textContent = 'Please enter a depot name.'; errEl.classList.remove('hidden'); return; }
+  if (AppState.depots[name]) { errEl.textContent = 'A depot with that name already exists.'; errEl.classList.remove('hidden'); return; }
+  AppState.depots[name] = { elements: [] };
+  setActiveDepot(name);
+  closeAddDepotModal();
+}
+
+/* ===== CANVAS RENDERING ===== */
+function renderCanvas() {
+  // Remove all element nodes (keep wall-preview)
+  Array.from(CANVAS.querySelectorAll('.el')).forEach(n => n.remove());
+  if (!AppState.activeDepot) return;
+  _nextId = 1;
+  for (const elData of AppState.depots[AppState.activeDepot].elements) {
+    if (!elData._id) elData._id = uid();
+    CANVAS.appendChild(renderElement(elData));
+  }
+}
+
+/* ===== TOOLBAR ACTIONS ===== */
+function setActiveTool(tool) {
+  AppState.activeTool = tool;
+  CANVAS.className = tool === 'wall' ? 'tool-wall' : (tool === 'label' ? 'tool-label' : '');
+  document.getElementById('btn-tool-wall').classList.toggle('active', tool === 'wall');
+}
+
+function addRack() {
+  if (!AppState.activeDepot) { showStatus('No depot selected.', true); return; }
+  const idRaw = document.getElementById('rack-id-input').value.trim().toUpperCase();
+  if (!idRaw) { showStatus('Enter a rack ID first (e.g. 04A).', true); return; }
+  // Centre on visible canvas area
+  const scroll = CANVAS.parentElement;
+  const cx = snap(scroll.scrollLeft + scroll.clientWidth / 2 - 30);
+  const cy = snap(scroll.scrollTop  + scroll.clientHeight / 2 - 15);
+  addElement({ type: 'rack', id: idRaw, x: cx, y: cy, w: 60, h: 30 });
+  document.getElementById('rack-id-input').value = '';
+  showStatus('Rack ' + idRaw + ' added.', false);
+}
+
+function addLabel() {
+  if (!AppState.activeDepot) { showStatus('No depot selected.', true); return; }
+  const text = document.getElementById('label-text-input').value.trim();
+  if (!text) { showStatus('Enter label text first.', true); return; }
+  const scroll = CANVAS.parentElement;
+  const cx = snap(scroll.scrollLeft + scroll.clientWidth / 2 - 30);
+  const cy = snap(scroll.scrollTop  + scroll.clientHeight / 2);
+  addElement({ type: 'label', x: cx, y: cy, text });
+  document.getElementById('label-text-input').value = '';
+  showStatus('Label added.', false);
+}
+
+function deleteSelected() {
+  if (!AppState.selected || !AppState.activeDepot) return;
+  const { elData, dom } = AppState.selected;
+  const els = AppState.depots[AppState.activeDepot].elements;
+  const idx = els.indexOf(elData);
+  if (idx !== -1) els.splice(idx, 1);
+  dom.remove();
+  AppState.selected = null;
+  showStatus('Deleted.', false);
+}
+
+/* ===== STATUS BAR ===== */
+function showStatus(msg, isError) {
+  const el = document.getElementById('toolbar-status');
+  el.textContent = msg;
+  el.style.color = isError ? '#c00' : '#1E6A35';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.textContent = ''; }, 3000);
+}
+
+/* ===== CSV IMPORT ===== */
+document.getElementById('import-csv-file').addEventListener('change', function() {
+  if (!this.files[0]) return;
+  const file = this.files[0];
+  this.value = '';
+  openCsvModal();
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true,
+    complete(result) {
+      const headers = result.meta.fields;
+      const depotCol = detectColumn(headers, COL_STOCK_DEPOT);
+      const binCol   = detectColumn(headers, COL_STOCK_BIN);
+      const errEl = document.getElementById('csv-error');
+      const infoEl = document.getElementById('csv-modal-info');
+
+      if (!binCol) {
+        errEl.textContent = 'Could not find a bin column. Expected: ' + COL_STOCK_BIN.join(', ');
+        errEl.classList.remove('hidden');
+        infoEl.textContent = 'Columns found: ' + headers.join(', ');
+        return;
+      }
+      errEl.classList.add('hidden');
+
+      // Group rack IDs by depot
+      const depotMap = {};
+      for (const row of result.data) {
+        const depotName = depotCol ? String(row[depotCol] ?? '').trim() : 'Unknown Depot';
+        const bin = String(row[binCol] ?? '').trim();
+        if (!bin || bin.length < 3) continue;
+        const rackId = parseRackId(bin);
+        if (!depotMap[depotName]) depotMap[depotName] = new Set();
+        depotMap[depotName].add(rackId);
+      }
+      const depotNames = Object.keys(depotMap).filter(n => n).sort();
+      if (depotNames.length === 0) {
+        errEl.textContent = 'No valid bin codes found in the file.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      AppState.csvParsed = { depotMap, depotCol, binCol };
+
+      const sel = document.getElementById('csv-depot-select');
+      sel.innerHTML = '';
+      for (const d of depotNames) {
+        const o = document.createElement('option');
+        o.value = d; o.textContent = d + ' (' + depotMap[d].size + ' racks)';
+        sel.appendChild(o);
+      }
+      infoEl.textContent = depotNames.length + ' depot' + (depotNames.length > 1 ? 's' : '') + ' found in file.';
+      document.getElementById('lbl-depot-select').classList.remove('hidden');
+      sel.classList.remove('hidden');
+      document.getElementById('csv-depot-hint').textContent = 'Racks will be auto-arranged by row. Drag to adjust.';
+      document.getElementById('csv-depot-hint').classList.remove('hidden');
+      document.getElementById('csv-modal-import').classList.remove('hidden');
+      updateCsvDepotHint();
+      sel.addEventListener('change', updateCsvDepotHint);
+    },
+    error(e) {
+      document.getElementById('csv-error').textContent = 'Parse error: ' + e.message;
+      document.getElementById('csv-error').classList.remove('hidden');
+    }
+  });
+});
+
+function updateCsvDepotHint() {
+  const sel = document.getElementById('csv-depot-select');
+  const depotName = sel.value;
+  const parsed = AppState.csvParsed;
+  if (!parsed || !depotName) return;
+  const rackCount = parsed.depotMap[depotName]?.size ?? 0;
+  document.getElementById('csv-depot-hint').textContent = rackCount + ' unique racks will be placed. Drag them after import to match your depot layout.';
+}
+
+function openCsvModal() {
+  document.getElementById('csv-modal-info').textContent = 'Reading file…';
+  document.getElementById('csv-error').classList.add('hidden');
+  document.getElementById('lbl-depot-select').classList.add('hidden');
+  document.getElementById('csv-depot-select').classList.add('hidden');
+  document.getElementById('csv-depot-hint').classList.add('hidden');
+  document.getElementById('csv-modal-import').classList.add('hidden');
+  document.getElementById('csv-modal').classList.remove('hidden');
+}
+
+function closeCsvModal() {
+  document.getElementById('csv-modal').classList.add('hidden');
+  AppState.csvParsed = null;
+}
+
+function importDepotFromCsv() {
+  const parsed = AppState.csvParsed;
+  if (!parsed) return;
+  const depotName = document.getElementById('csv-depot-select').value;
+  if (!depotName) return;
+  const rackIds = Array.from(parsed.depotMap[depotName]).sort();
+
+  // Create depot if it doesn't exist
+  if (!AppState.depots[depotName]) AppState.depots[depotName] = { elements: [] };
+
+  // Auto-layout: group by row, stack rows vertically
+  const byRow = {};
+  for (const id of rackIds) {
+    const row = id.slice(0, 2);
+    if (!byRow[row]) byRow[row] = [];
+    byRow[row].push(id);
+  }
+  const rows = Object.keys(byRow).sort();
+  const RACK_W = 60, RACK_H = 30, RACK_GAP = 8;
+  const ROW_GAP = 60, START_X = 40, START_Y = 40;
+
+  let rowY = START_Y;
+  for (const rowKey of rows) {
+    // Row label
+    AppState.depots[depotName].elements.push({ type: 'label', x: START_X, y: rowY - 18, text: 'Row ' + rowKey });
+    let x = START_X;
+    for (const rackId of byRow[rowKey].sort()) {
+      AppState.depots[depotName].elements.push({ type: 'rack', id: rackId, x, y: rowY, w: RACK_W, h: RACK_H });
+      x += RACK_W + RACK_GAP;
+    }
+    rowY += RACK_H + ROW_GAP;
+  }
+
+  setActiveDepot(depotName);
+  closeCsvModal();
+  showStatus('Imported ' + rackIds.length + ' racks for ' + depotName + '.', false);
+}
+
+/* ===== JSON IMPORT ===== */
+document.getElementById('import-json-file').addEventListener('change', function() {
+  if (!this.files[0]) return;
+  const file = this.files[0];
+  this.value = '';
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const json = JSON.parse(e.target.result);
+      if (json.version !== 1 || typeof json.depots !== 'object') {
+        alert('Invalid file format. Expected a depot-layouts.json exported from this tool.');
+        return;
+      }
+      loadFromJson(json);
+      showStatus('Loaded ' + Object.keys(json.depots).length + ' depot(s) from file.', false);
+    } catch(err) {
+      alert('Could not read file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+function loadFromJson(json) {
+  AppState.depots = {};
+  for (const [name, depot] of Object.entries(json.depots)) {
+    AppState.depots[name] = {
+      elements: (depot.elements ?? []).map(el => ({ ...el }))
+    };
+  }
+  const firstName = Object.keys(AppState.depots)[0] ?? null;
+  setActiveDepot(firstName);
+}
+
+/* ===== JSON EXPORT ===== */
+function exportJson() {
+  const depotNames = Object.keys(AppState.depots);
+  if (depotNames.length === 0) { showStatus('Nothing to export — add a depot first.', true); return; }
+
+  const out = { version: 1, depots: {} };
+  for (const name of depotNames) {
+    const elements = AppState.depots[name].elements.map(el => {
+      const e = { type: el.type };
+      if (el.type === 'rack')  { e.id = el.id; e.x = el.x; e.y = el.y; e.w = el.w; e.h = el.h; }
+      if (el.type === 'wall')  { e.x = el.x; e.y = el.y; e.w = el.w; e.h = el.h; }
+      if (el.type === 'label') { e.x = el.x; e.y = el.y; e.text = el.text; }
+      return e;
+    });
+    out.depots[name] = {
+      canvasW: 1200,
+      canvasH: 700,
+      elements,
+    };
+  }
+
+  const json = JSON.stringify(out, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'depot-layouts.json'; a.click();
+  URL.revokeObjectURL(url);
+  showStatus('Exported depot-layouts.json (' + depotNames.length + ' depot' + (depotNames.length > 1 ? 's' : '') + ').', false);
+}
+
+/* ===== INIT ===== */
+document.getElementById('btn-add-rack').addEventListener('click', addRack);
+document.getElementById('btn-add-label').addEventListener('click', addLabel);
+document.getElementById('btn-delete-sel').addEventListener('click', deleteSelected);
+document.getElementById('btn-export-json').addEventListener('click', exportJson);
+document.getElementById('btn-tool-wall').addEventListener('click', () => {
+  if (AppState.activeTool === 'wall') setActiveTool('select');
+  else setActiveTool('wall');
+});
+document.getElementById('csv-modal-close').addEventListener('click', closeCsvModal);
+document.getElementById('csv-modal-cancel').addEventListener('click', closeCsvModal);
+document.getElementById('csv-modal-import').addEventListener('click', importDepotFromCsv);
+document.getElementById('add-depot-close').addEventListener('click', closeAddDepotModal);
+document.getElementById('add-depot-cancel').addEventListener('click', closeAddDepotModal);
+document.getElementById('add-depot-confirm').addEventListener('click', confirmAddDepot);
+document.getElementById('new-depot-name').addEventListener('keydown', e => { if (e.key === 'Enter') confirmAddDepot(); });
+document.getElementById('rack-id-input').addEventListener('keydown', e => { if (e.key === 'Enter') addRack(); });
+
+renderDepotTabs();
+</script>
+</body>
+</html>

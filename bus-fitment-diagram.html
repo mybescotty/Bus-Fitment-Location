@@ -113,6 +113,11 @@
     .badge-count  { font-size: 9px;  font-weight: 600; fill: rgba(255,255,255,0.8); font-family: 'Segoe UI', Arial, sans-serif; }
     .badge-issues { font-size: 11px; font-weight: 700; fill: white;                 font-family: 'Segoe UI', Arial, sans-serif; }
 
+    .depot-map-section { padding: 12px 16px; border-top: 1px solid #e0e0ec; }
+    .depot-map-heading { font-size: 12px; font-weight: 700; color: var(--fb-navy); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+    .depot-map-container { overflow: auto; }
+    .depot-map-container svg { display: block; border-radius: 4px; background: #F8F9FB; border: 1px solid #e0e0ec; }
+
     @media (max-width: 900px) {
       #diagram-section { flex-direction: column; }
       #parts-panel { width: 100%; max-height: 400px; }
@@ -146,6 +151,10 @@
       <div class="file-group">
         <label for="input-stock">Stock File CSV <span style="font-weight:400;opacity:0.7">(optional)</span></label>
         <input type="file" id="input-stock" accept=".csv">
+      </div>
+      <div class="file-group">
+        <label for="input-depot-map">Depot Map JSON <span style="font-weight:400;opacity:0.7">(optional)</span></label>
+        <input type="file" id="input-depot-map" accept=".json">
       </div>
       <button id="btn-load" class="btn-primary">Load</button>
       <button id="btn-share" class="btn-primary hidden" style="background:var(--fb-navy)">&#8595; Save Shareable Copy</button>
@@ -405,7 +414,9 @@ const AppState = {
   stockRows: [], stockCols: {}, stockIndex: new Map(),
   models: [], selectedModel: null, selectedFleet: null, selectedZone: null,
   aggregated: new Map(), fleetIndex: new Map(), modelFleets: new Map(), sortAsc: false,
-  embeddedMeta: null,   // populated when viewer is loaded from EMBEDDED_DATA
+  embeddedMeta: null,
+  depotLayouts: new Map(),   // Map<normalisedDepotName, {canvasW, canvasH, elements}>
+  depotLayoutsRaw: null,     // kept for re-embedding into shareable HTML
 };
 
 function parseCSV(file) {
@@ -455,9 +466,10 @@ function buildStockIndex() {
 }
 
 async function handleLoad() {
-  const fleetFile = document.getElementById('input-fleet').files[0];
-  const txFile    = document.getElementById('input-tx').files[0];
-  const stockFile = document.getElementById('input-stock').files[0];
+  const fleetFile     = document.getElementById('input-fleet').files[0];
+  const txFile        = document.getElementById('input-tx').files[0];
+  const stockFile     = document.getElementById('input-stock').files[0];
+  const depotMapFile  = document.getElementById('input-depot-map').files[0];
   clearStatus();
   if (!fleetFile || !txFile) { showStatus('error', 'Please select both Fleet and Transaction CSV files before loading.'); return; }
   try {
@@ -477,6 +489,7 @@ async function handleLoad() {
     } else {
       AppState.stockRows = []; AppState.stockIndex = new Map();
     }
+    if (depotMapFile) await handleDepotMapUpload(depotMapFile);
     buildAggregatedData();
     if (AppState.models.length === 0) {
       showStatus('warn', 'No matching fleet numbers found between the two files. Check fleet number column format (e.g. leading zeros).');
@@ -485,6 +498,7 @@ async function handleLoad() {
     populateModelDropdown();
     let msg = 'Loaded: ' + AppState.fleetRows.length.toLocaleString() + ' fleet records, ' + AppState.txRows.length.toLocaleString() + ' transactions, ' + AppState.models.length + ' bus model(s) found.';
     if (stockFile) msg += ' Stock file: ' + AppState.stockRows.length.toLocaleString() + ' records.';
+    if (depotMapFile && AppState.depotLayouts.size > 0) msg += ' Depot maps: ' + AppState.depotLayouts.size + ' depot(s).';
     if (!AppState.txCols.group) msg += ' Note: no material group column found — all parts will appear in General zone.';
     showStatus(!AppState.txCols.group ? 'warn' : 'ok', msg);
     document.getElementById('btn-share').classList.remove('hidden');
@@ -770,6 +784,7 @@ function generateShareableHTML() {
     txCount:         AppState.embeddedMeta?.txCount    ?? AppState.txRows.length,
     fleetCount:      AppState.embeddedMeta?.fleetCount ?? AppState.fleetRows.length,
     generatedAt:     AppState.embeddedMeta?.generatedAt ?? new Date().toISOString(),
+    depotLayoutsRaw: AppState.depotLayoutsRaw ?? null,
   };
   // Replace < with < so embedded JSON values cannot break the surrounding script block
   const json   = JSON.stringify(payload).replace(/</g, '\\u003c');
@@ -782,6 +797,80 @@ function generateShareableHTML() {
   const a    = document.createElement('a');
   a.href = url; a.download = 'bus-fitment-' + date + '.html'; a.click();
   URL.revokeObjectURL(url);
+}
+
+/* === DEPOT MAP === */
+function normaliseDepotName(s) { return String(s ?? '').trim().toLowerCase(); }
+
+function handleDepotMapUpload(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const json = JSON.parse(e.target.result);
+        loadDepotLayouts(json);
+      } catch(err) {
+        // silently skip malformed file; the status message won't mention it
+      }
+      resolve();
+    };
+    reader.onerror = () => resolve();
+    reader.readAsText(file);
+  });
+}
+
+function loadDepotLayouts(json) {
+  if (!json || json.version !== 1 || typeof json.depots !== 'object') return;
+  AppState.depotLayoutsRaw = json;
+  AppState.depotLayouts.clear();
+  for (const [name, depot] of Object.entries(json.depots)) {
+    AppState.depotLayouts.set(normaliseDepotName(name), {
+      canvasW: depot.canvasW ?? 1200,
+      canvasH: depot.canvasH ?? 700,
+      elements: Array.isArray(depot.elements) ? depot.elements : [],
+    });
+  }
+}
+
+function parseRackId(bin) { return String(bin).trim().slice(0, 3).toUpperCase(); }
+function parseShelfLevel(bin) { return String(bin).trim()[3]?.toUpperCase() ?? ''; }
+
+function findRackElement(layout, rackId) {
+  const id = rackId.toUpperCase();
+  return layout.elements.find(el => el.type === 'rack' && String(el.id).toUpperCase() === id) ?? null;
+}
+
+function renderDepotMap(layout, rackId, shelfLabel, containerEl) {
+  const scale = Math.min(420 / layout.canvasW, 260 / layout.canvasH);
+  const svgW = Math.round(layout.canvasW * scale);
+  const svgH = Math.round(layout.canvasH * scale);
+  const parts = [];
+  parts.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + layout.canvasW + ' ' + layout.canvasH + '" width="' + svgW + '" height="' + svgH + '">');
+
+  for (const el of layout.elements) {
+    if (el.type === 'wall') {
+      parts.push('<rect x="' + el.x + '" y="' + el.y + '" width="' + el.w + '" height="' + el.h + '" fill="#1A1840" rx="2"/>');
+    } else if (el.type === 'label') {
+      parts.push('<text x="' + el.x + '" y="' + (el.y + 12) + '" font-size="11" font-family="\'Segoe UI\',Arial,sans-serif" fill="#2D2A6E" font-weight="700">' + escHtml(el.text) + '</text>');
+    } else if (el.type === 'rack') {
+      const isMatch = String(el.id).toUpperCase() === rackId.toUpperCase();
+      const fill    = isMatch ? '#E5007D' : '#F0F0F8';
+      const stroke  = isMatch ? '#B5005A' : '#9090B8';
+      const textCol = isMatch ? '#ffffff' : '#2D2A6E';
+      const w = el.w ?? 60, h = el.h ?? 30;
+      parts.push('<rect x="' + el.x + '" y="' + el.y + '" width="' + w + '" height="' + h + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.5" rx="2"/>');
+      const label = isMatch && shelfLabel ? el.id + ' / ' + shelfLabel : el.id;
+      const fontSize = Math.max(7, Math.min(11, h * 0.38));
+      if (isMatch && shelfLabel) {
+        parts.push('<text x="' + (el.x + w/2) + '" y="' + (el.y + h/2 - 4) + '" font-size="' + (fontSize - 1) + '" font-family="\'Segoe UI\',Arial,sans-serif" fill="' + textCol + '" font-weight="700" text-anchor="middle">' + escHtml(el.id) + '</text>');
+        parts.push('<text x="' + (el.x + w/2) + '" y="' + (el.y + h/2 + 7) + '" font-size="' + (fontSize - 1) + '" font-family="\'Segoe UI\',Arial,sans-serif" fill="' + textCol + '" font-weight="600" text-anchor="middle">Shelf ' + escHtml(shelfLabel) + '</text>');
+      } else {
+        parts.push('<text x="' + (el.x + w/2) + '" y="' + (el.y + h/2 + 4) + '" font-size="' + fontSize + '" font-family="\'Segoe UI\',Arial,sans-serif" fill="' + textCol + '" font-weight="700" text-anchor="middle" dominant-baseline="central">' + escHtml(el.id) + '</text>');
+      }
+    }
+  }
+  parts.push('</svg>');
+  containerEl.innerHTML = parts.join('');
 }
 
 function showStockModal(partNo, partDesc) {
@@ -802,6 +891,33 @@ function showStockModal(partNo, partDesc) {
     }
     html += '</tbody></table>';
     body.innerHTML = html;
+
+    // Depot map section — append one map per matching depot
+    if (AppState.depotLayouts.size > 0 && rows) {
+      const seen = new Set();
+      for (const { depot, bin } of rows) {
+        const key = normaliseDepotName(depot);
+        if (seen.has(key + '|' + bin)) continue;
+        seen.add(key + '|' + bin);
+        const layout = AppState.depotLayouts.get(key);
+        if (!layout) continue;
+        const rackId = parseRackId(bin);
+        const rack   = findRackElement(layout, rackId);
+        if (!rack) continue;
+        const shelfLabel = parseShelfLevel(bin);
+        const section = document.createElement('div');
+        section.className = 'depot-map-section';
+        const heading = document.createElement('div');
+        heading.className = 'depot-map-heading';
+        heading.textContent = 'Depot Location — ' + depot + (shelfLabel ? ' (Shelf ' + shelfLabel + ')' : '');
+        section.appendChild(heading);
+        const mapEl = document.createElement('div');
+        mapEl.className = 'depot-map-container';
+        renderDepotMap(layout, rackId, shelfLabel, mapEl);
+        section.appendChild(mapEl);
+        body.appendChild(section);
+      }
+    }
   }
   document.getElementById('stock-modal').classList.remove('hidden');
 }
@@ -859,6 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
     AppState.stockIndex      = new Map(d.stockIndex);
     AppState.stockRows       = d.hasStock ? [{}] : []; // sentinel — keeps showStockModal logic correct
     AppState.embeddedMeta    = { txCount: d.txCount, fleetCount: d.fleetCount, generatedAt: d.generatedAt };
+    if (d.depotLayoutsRaw) loadDepotLayouts(d.depotLayoutsRaw);
     hideSection('upload-section');
     showSection('model-section');
     populateModelDropdown();
