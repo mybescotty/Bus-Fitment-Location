@@ -820,24 +820,45 @@ function handleDepotMapUpload(file) {
 }
 
 function loadDepotLayouts(json) {
-  if (!json || json.version !== 1 || typeof json.depots !== 'object') return;
+  if (!json || typeof json.depots !== 'object') return;
   AppState.depotLayoutsRaw = json;
   AppState.depotLayouts.clear();
   for (const [name, depot] of Object.entries(json.depots)) {
-    AppState.depotLayouts.set(normaliseDepotName(name), {
-      canvasW: depot.canvasW ?? 1200,
-      canvasH: depot.canvasH ?? 700,
-      elements: Array.isArray(depot.elements) ? depot.elements : [],
-    });
+    const key = normaliseDepotName(name);
+    if (json.version >= 2 && depot.areas) {
+      // v2: multiple areas per depot
+      const areas = new Map();
+      for (const [aName, area] of Object.entries(depot.areas)) {
+        areas.set(aName, {
+          canvasW: area.canvasW ?? 1200,
+          canvasH: area.canvasH ?? 700,
+          elements: Array.isArray(area.elements) ? area.elements : [],
+        });
+      }
+      AppState.depotLayouts.set(key, { areas });
+    } else {
+      // v1: flat elements — wrap in a single "Main Store" area
+      AppState.depotLayouts.set(key, {
+        areas: new Map([['Main Store', {
+          canvasW: depot.canvasW ?? 1200,
+          canvasH: depot.canvasH ?? 700,
+          elements: Array.isArray(depot.elements) ? depot.elements : [],
+        }]])
+      });
+    }
   }
 }
 
 function parseRackId(bin) { return String(bin).trim().slice(0, 3).toUpperCase(); }
 function parseShelfLevel(bin) { return String(bin).trim()[3]?.toUpperCase() ?? ''; }
 
-function findRackElement(layout, rackId) {
+function findRackElement(depotLayout, rackId) {
   const id = rackId.toUpperCase();
-  return layout.elements.find(el => el.type === 'rack' && String(el.id).toUpperCase() === id) ?? null;
+  for (const [areaName, area] of depotLayout.areas) {
+    const rack = area.elements.find(el => el.type === 'rack' && String(el.id).toUpperCase() === id);
+    if (rack) return { rack, areaName, area };
+  }
+  return null;
 }
 
 function renderDepotMap(layout, rackId, shelfLabel, containerEl) {
@@ -899,21 +920,23 @@ function showStockModal(partNo, partDesc) {
         const key = normaliseDepotName(depot);
         if (seen.has(key + '|' + bin)) continue;
         seen.add(key + '|' + bin);
-        const layout = AppState.depotLayouts.get(key);
-        if (!layout) continue;
+        const depotLayout = AppState.depotLayouts.get(key);
+        if (!depotLayout) continue;
         const rackId = parseRackId(bin);
-        const rack   = findRackElement(layout, rackId);
-        if (!rack) continue;
+        const found  = findRackElement(depotLayout, rackId);
+        if (!found) continue;
+        const { areaName, area } = found;
         const shelfLabel = parseShelfLevel(bin);
         const section = document.createElement('div');
         section.className = 'depot-map-section';
         const heading = document.createElement('div');
         heading.className = 'depot-map-heading';
-        heading.textContent = 'Depot Location — ' + depot + (shelfLabel ? ' (Shelf ' + shelfLabel + ')' : '');
+        const areaStr = areaName !== 'Main Store' ? ' — ' + areaName : '';
+        heading.textContent = 'Location: ' + depot + areaStr + ' / Rack ' + rackId + (shelfLabel ? ', Shelf ' + shelfLabel : '');
         section.appendChild(heading);
         const mapEl = document.createElement('div');
         mapEl.className = 'depot-map-container';
-        renderDepotMap(layout, rackId, shelfLabel, mapEl);
+        renderDepotMap(area, rackId, shelfLabel, mapEl);
         section.appendChild(mapEl);
         body.appendChild(section);
       }
