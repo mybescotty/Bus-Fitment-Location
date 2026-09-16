@@ -76,7 +76,8 @@
     .el-rack:hover { border-color: var(--navy); }
     .el-rack.selected { border-color: var(--sel); box-shadow: 0 0 0 2px rgba(26,127,193,0.3); }
     .el-wall { background: var(--wall-bg); border-radius: 2px; cursor: move; }
-    .el-wall.selected { outline: 2px solid var(--sel); outline-offset: 2px; }
+    .el-wall:hover { opacity: 0.75; }
+    .el-wall.selected { outline: 3px solid var(--sel); outline-offset: 2px; box-shadow: 0 0 0 5px rgba(26,127,193,0.25); }
     .el-label { font-size: 12px; font-weight: 700; color: var(--navy); white-space: nowrap;
                 cursor: move; padding: 2px 4px; border-radius: 2px; }
     .el-label:hover { background: rgba(45,42,110,0.08); }
@@ -171,11 +172,12 @@
 </div>
 
 <div id="help-bar">
-  <strong>Select:</strong> click &nbsp;|&nbsp;
+  <strong>Select:</strong> click any element &nbsp;|&nbsp;
   <strong>Move:</strong> drag &nbsp;|&nbsp;
-  <strong>Wall:</strong> activate Wall tool then click-drag &nbsp;|&nbsp;
-  <strong>Delete:</strong> select + Delete key or toolbar button &nbsp;|&nbsp;
-  <strong>Rename:</strong> double-click depot or area tab
+  <strong>Rotate rack:</strong> double-click or press R when selected &nbsp;|&nbsp;
+  <strong>Delete (racks, walls, labels):</strong> click to select (blue outline), then Delete key or toolbar button &nbsp;|&nbsp;
+  <strong>Wall:</strong> activate Wall tool, then click-drag on canvas &nbsp;|&nbsp;
+  <strong>Rename:</strong> double-click a depot or area tab
 </div>
 
 <!-- CSV IMPORT MODAL -->
@@ -301,6 +303,7 @@ function makeRackDom(elData) {
   div.textContent = elData.id;
   div.dataset.elId = elData._id;
   wireEl(div, elData);
+  div.addEventListener('dblclick', e => { e.stopPropagation(); rotateRack(elData, div); });
   return div;
 }
 
@@ -410,12 +413,26 @@ CANVAS.addEventListener('mousedown', e => {
 });
 
 document.addEventListener('keydown', e => {
+  const t = document.activeElement?.tagName;
+  if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT') return;
   if ((e.key === 'Delete' || e.key === 'Backspace') && AppState.selected) {
-    const t = document.activeElement?.tagName;
-    if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT') return;
     deleteSelected();
   }
+  if (e.key === 'r' || e.key === 'R') {
+    const sel = AppState.selected;
+    if (sel && sel.elData.type === 'rack') rotateRack(sel.elData, sel.dom);
+  }
 });
+
+/* ===== ROTATE ===== */
+function rotateRack(elData, dom) {
+  const tmp = elData.w;
+  elData.w = elData.h;
+  elData.h = tmp;
+  dom.style.width  = elData.w + 'px';
+  dom.style.height = elData.h + 'px';
+  showStatus('Rack ' + elData.id + ' rotated.', false);
+}
 
 /* ===== SELECTION ===== */
 function selectElement(elData, dom) {
